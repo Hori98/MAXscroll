@@ -1,4 +1,4 @@
-export type Phase = 'home' | 'countdown' | 'armed' | 'flying' | 'result' | 'interstitial'
+export type Phase = 'home' | 'countdown' | 'armed' | 'measuring' | 'flying' | 'result' | 'interstitial'
 
 export type InputType =
   | 'mouse-wheel'
@@ -59,6 +59,13 @@ export type SpinMeasurement = {
   inferenceConfidence: number
   anomalyFlags: string[]
   trustedScore: number
+}
+
+export type SpinMeasurementProgress = {
+  rawDeltaTotal: number
+  normalizedDeltaTotal: number
+  eventCount: number
+  durationMs: number
 }
 
 export type RunResult = {

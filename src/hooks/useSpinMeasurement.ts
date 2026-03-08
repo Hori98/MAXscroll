@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { TRACKPAD_WINDOW_MS, WHEEL_WINDOW_MS } from '../lib/constants'
 import { normalizeDelta } from '../lib/normalizeDelta'
-import type { InputType, SpinMeasurement } from '../lib/types'
+import type { InputType, SpinMeasurement, SpinMeasurementProgress } from '../lib/types'
 
 type UseSpinMeasurementArgs = {
+  onStart?: () => void
+  onProgress?: (progress: SpinMeasurementProgress) => void
   onComplete: (measurement: SpinMeasurement) => void
 }
 
@@ -75,7 +77,7 @@ function calcTrustedScore(trusted: boolean, anomalyFlags: string[]): number {
   return Math.max(0, Math.min(1, score))
 }
 
-export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
+export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinMeasurementArgs) {
   const [isListening, setIsListening] = useState(false)
   const sessionRef = useRef<SessionState | null>(null)
   const timerRef = useRef<number | null>(null)
@@ -85,6 +87,15 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current)
       timerRef.current = null
+    }
+  }, [])
+
+  const buildProgress = useCallback((session: SessionState): SpinMeasurementProgress => {
+    return {
+      rawDeltaTotal: session.rawDeltaTotal,
+      normalizedDeltaTotal: session.normalizedDeltaTotal,
+      eventCount: session.eventCount,
+      durationMs: Math.max(0, session.lastTs - session.startTs),
     }
   }, [])
 
@@ -145,6 +156,7 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
           trusted: true,
           samples: [],
         }
+        onStart?.()
       }
 
       const session = sessionRef.current
@@ -154,11 +166,12 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
       session.maxSingleDelta = Math.max(session.maxSingleDelta, raw)
       session.eventCount += 1
       session.samples.push(raw)
+      onProgress?.(buildProgress(session))
 
       clearTimer()
       timerRef.current = window.setTimeout(flush, getWindowMs(session.samples))
     },
-    [clearTimer, flush, isListening],
+    [buildProgress, clearTimer, flush, isListening, onProgress, onStart],
   )
 
   const start = useCallback(() => {
@@ -182,6 +195,7 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
         y: event.touches[0].clientY,
         ts: performance.now(),
       }
+      onStart?.()
     }
 
     const onTouchMove = (event: TouchEvent) => {
@@ -238,7 +252,7 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
       window.removeEventListener('touchend', onTouchEnd)
       clearTimer()
     }
-  }, [clearTimer, isListening, onComplete, onWheel])
+  }, [clearTimer, isListening, onComplete, onProgress, onStart, onWheel])
 
   return { isListening, start, stop }
 }

@@ -5,6 +5,7 @@ import { CountdownPanel } from './components/CountdownPanel'
 import { FlyingPanel } from './components/FlyingPanel'
 import { HomePanel } from './components/HomePanel'
 import { InterstitialAd } from './components/InterstitialAd'
+import { MeasuringPanel } from './components/MeasuringPanel'
 import { ResultPanel } from './components/ResultPanel'
 import { useSoundEffects } from './hooks/useSoundEffects'
 import { useSpinMeasurement } from './hooks/useSpinMeasurement'
@@ -24,6 +25,7 @@ import type {
   RunResult,
   SavedRun,
   SpinMeasurement,
+  SpinMeasurementProgress,
 } from './lib/types'
 
 function createSavedRun(
@@ -60,6 +62,7 @@ function App() {
   const [phase, setPhase] = useState<Phase>('home')
   const [countdown, setCountdown] = useState(3)
   const [measurement, setMeasurement] = useState<SpinMeasurement | null>(null)
+  const [measurementProgress, setMeasurementProgress] = useState<SpinMeasurementProgress | null>(null)
   const [result, setResult] = useState<RunResult | null>(null)
   const [isNewBest, setIsNewBest] = useState(false)
   const [shareState, setShareState] = useState<'idle' | 'done'>('idle')
@@ -68,8 +71,15 @@ function App() {
   const { playLaunch, playResult, playClick } = useSoundEffects()
 
   const { start, stop } = useSpinMeasurement({
+    onStart: () => {
+      setPhase('measuring')
+    },
+    onProgress: (progress) => {
+      setMeasurementProgress(progress)
+    },
     onComplete: (nextMeasurement) => {
       setMeasurement(nextMeasurement)
+      setMeasurementProgress(null)
       setEnvironment((prev) =>
         makeEnvironmentProfile(
           prev.detected,
@@ -89,6 +99,7 @@ function App() {
     stop()
     setResult(null)
     setMeasurement(null)
+    setMeasurementProgress(null)
     setIsNewBest(false)
     setShareState('idle')
     setCountdown(3)
@@ -167,6 +178,7 @@ function App() {
     playClick()
     setResult(null)
     setMeasurement(null)
+    setMeasurementProgress(null)
     setAdCountdown(2)
     setPhase('interstitial')
   }
@@ -196,10 +208,16 @@ function App() {
   }, [countdown, phase])
 
   useEffect(() => {
-    if (phase !== 'armed') return
-    start()
-    return () => stop()
+    if (phase === 'armed') {
+      start()
+    }
   }, [phase, start, stop])
+
+  useEffect(() => {
+    if (phase !== 'armed' && phase !== 'measuring') {
+      stop()
+    }
+  }, [phase, stop])
 
   if (phase === 'interstitial') {
     return <InterstitialAd onContinue={onCloseInterstitial} secondsLeft={adCountdown} />
@@ -222,6 +240,10 @@ function App() {
 
   if (phase === 'armed') {
     return <ArmedPanel hasTouch={environment.detected.hasTouch} />
+  }
+
+  if (phase === 'measuring') {
+    return <MeasuringPanel hasTouch={environment.detected.hasTouch} progress={measurementProgress} />
   }
 
   if (phase === 'flying' && measurement) {
