@@ -32,7 +32,11 @@ export function HomePanel({
       </button>
 
       <div className="mt-4 h-6 text-sm text-cyan-100/80">
-        {isReady ? 'Scroll your wheel now!' : 'Ready when you are.'}
+        {isReady
+          ? environment.hasTouch
+            ? 'Swipe once to launch!'
+            : 'Scroll your wheel now!'
+          : 'Ready when you are.'}
       </div>
 
       {bestRun && (

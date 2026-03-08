@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { FlyingPanel } from './components/FlyingPanel'
 import { HomePanel } from './components/HomePanel'
+import { InterstitialAd } from './components/InterstitialAd'
 import { ResultPanel } from './components/ResultPanel'
 import { useSpinMeasurement } from './hooks/useSpinMeasurement'
+import { useSoundEffects } from './hooks/useSoundEffects'
 import { getEnvironmentProfile } from './lib/getEnvironment'
 import {
   getBestRun,
@@ -52,7 +54,9 @@ function App() {
   const [result, setResult] = useState<RunResult | null>(null)
   const [isNewBest, setIsNewBest] = useState(false)
   const [shareState, setShareState] = useState<'idle' | 'done'>('idle')
+  const [adCountdown, setAdCountdown] = useState(2)
   const [bestRun, setBestRun] = useState<SavedRun | null>(() => getBestRun())
+  const { playLaunch, playResult, playClick } = useSoundEffects()
 
   const { isListening, start, stop } = useSpinMeasurement({
     onComplete: (nextMeasurement) => {
@@ -62,6 +66,7 @@ function App() {
   })
 
   const onLaunch = () => {
+    playLaunch()
     setPhase('ready')
     setResult(null)
     setMeasurement(null)
@@ -83,6 +88,7 @@ function App() {
   const onFlightComplete = (nextResult: RunResult) => {
     if (!measurement) return
 
+    playResult()
     const run = createSavedRun(environment, measurement, nextResult)
     saveLatestRun(run)
 
@@ -122,9 +128,25 @@ function App() {
   }
 
   const onRetry = () => {
+    playClick()
     setResult(null)
     setMeasurement(null)
+    setAdCountdown(2)
+    setPhase('interstitial')
+  }
+
+  const onCloseInterstitial = () => {
     setPhase('home')
+  }
+
+  useEffect(() => {
+    if (phase !== 'interstitial' || adCountdown <= 0) return
+    const timer = window.setTimeout(() => setAdCountdown((prev) => Math.max(0, prev - 1)), 1000)
+    return () => window.clearTimeout(timer)
+  }, [adCountdown, phase])
+
+  if (phase === 'interstitial') {
+    return <InterstitialAd onContinue={onCloseInterstitial} secondsLeft={adCountdown} />
   }
 
   if (phase === 'home' || phase === 'ready') {

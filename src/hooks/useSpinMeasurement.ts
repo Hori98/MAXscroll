@@ -37,6 +37,7 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
   const [isListening, setIsListening] = useState(false)
   const sessionRef = useRef<SessionState | null>(null)
   const timerRef = useRef<number | null>(null)
+  const touchStartRef = useRef<{ y: number; ts: number } | null>(null)
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -106,23 +107,70 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
 
   const start = useCallback(() => {
     sessionRef.current = null
+    touchStartRef.current = null
     clearTimer()
     setIsListening(true)
   }, [clearTimer])
 
   const stop = useCallback(() => {
     sessionRef.current = null
+    touchStartRef.current = null
     clearTimer()
     setIsListening(false)
   }, [clearTimer])
 
   useEffect(() => {
+    const onTouchStart = (event: TouchEvent) => {
+      if (!isListening || event.touches.length === 0 || !event.isTrusted) return
+      touchStartRef.current = {
+        y: event.touches[0].clientY,
+        ts: performance.now(),
+      }
+    }
+
+    const onTouchMove = (event: TouchEvent) => {
+      if (!isListening) return
+      event.preventDefault()
+    }
+
+    const onTouchEnd = (event: TouchEvent) => {
+      if (!isListening || !event.isTrusted) return
+      const startPoint = touchStartRef.current
+      if (!startPoint || event.changedTouches.length === 0) return
+
+      const endY = event.changedTouches[0].clientY
+      const durationMs = Math.max(1, performance.now() - startPoint.ts)
+      const delta = Math.abs(startPoint.y - endY)
+      if (delta < 4) return
+
+      const velocity = delta / durationMs
+      const normalized = delta * 4 + velocity * 240
+
+      touchStartRef.current = null
+      setIsListening(false)
+      onComplete({
+        rawDeltaTotal: delta,
+        normalizedDeltaTotal: normalized,
+        maxSingleDelta: delta,
+        eventCount: 1,
+        deltaMode: 0,
+        durationMs,
+        trusted: true,
+      })
+    }
+
     window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('touchstart', onTouchStart, { passive: true })
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('touchend', onTouchEnd, { passive: true })
     return () => {
       window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('touchstart', onTouchStart)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
       clearTimer()
     }
-  }, [clearTimer, onWheel])
+  }, [clearTimer, isListening, onComplete, onWheel])
 
   return { isListening, start, stop }
 }

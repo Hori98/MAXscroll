@@ -1,4 +1,4 @@
-export type Phase = 'home' | 'ready' | 'flying' | 'result'
+export type Phase = 'home' | 'ready' | 'flying' | 'result' | 'interstitial'
 
 export type InputType =
   | 'mouse-wheel'
