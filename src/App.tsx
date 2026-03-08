@@ -13,6 +13,7 @@ import { getEnvironmentProfile, makeEnvironmentProfile } from './lib/getEnvironm
 import { buildShareImage } from './lib/shareImage'
 import {
   getBestRun,
+  getLatestRun,
   getSavedEnvironment,
   saveBestRun,
   saveEnvironment,
@@ -64,6 +65,7 @@ function App() {
   const [measurement, setMeasurement] = useState<SpinMeasurement | null>(null)
   const [measurementProgress, setMeasurementProgress] = useState<SpinMeasurementProgress | null>(null)
   const [result, setResult] = useState<RunResult | null>(null)
+  const [previousRun, setPreviousRun] = useState<SavedRun | null>(null)
   const [isNewBest, setIsNewBest] = useState(false)
   const [shareState, setShareState] = useState<'idle' | 'done'>('idle')
   const [adCountdown, setAdCountdown] = useState(2)
@@ -101,6 +103,7 @@ function App() {
     setResult(null)
     setMeasurement(null)
     setMeasurementProgress(null)
+    setPreviousRun(null)
     setIsNewBest(false)
     setShareState('idle')
     setCountdown(3)
@@ -120,6 +123,8 @@ function App() {
 
   const onFlightComplete = (nextResult: RunResult, measured: SpinMeasurement) => {
     playResult()
+    const prevLatest = getLatestRun()
+    setPreviousRun(prevLatest)
     const run = createSavedRun(environment, measured, nextResult)
     saveLatestRun(run)
 
@@ -178,11 +183,21 @@ function App() {
     setResult(null)
     setMeasurement(null)
     setMeasurementProgress(null)
+    setPreviousRun(null)
     setAdCountdown(2)
     setPhase('interstitial')
   }
 
   const onCloseInterstitial = () => {
+    setPreviousRun(null)
+    setPhase('home')
+  }
+
+  const onBackHome = () => {
+    setResult(null)
+    setMeasurement(null)
+    setMeasurementProgress(null)
+    setPreviousRun(null)
     setPhase('home')
   }
 
@@ -249,11 +264,11 @@ function App() {
     return (
       <ResultPanel
         environment={environment}
-        measurement={measurement}
         result={result}
-        bestRun={bestRun}
+        previousRun={previousRun}
         isNewBest={isNewBest}
         onRetry={onRetry}
+        onBackHome={onBackHome}
         onShare={onShare}
         shareState={shareState}
       />

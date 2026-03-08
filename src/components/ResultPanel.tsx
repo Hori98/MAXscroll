@@ -1,30 +1,34 @@
 import { EnvironmentBadge } from './EnvironmentBadge'
-import type { EnvironmentProfile, RunResult, SavedRun, SpinMeasurement } from '../lib/types'
+import type { EnvironmentProfile, RunResult, SavedRun } from '../lib/types'
 
 type Props = {
   environment: EnvironmentProfile
-  measurement: SpinMeasurement
   result: RunResult
-  bestRun: SavedRun | null
+  previousRun: SavedRun | null
   isNewBest: boolean
   onRetry: () => void
+  onBackHome: () => void
   onShare: () => void
   shareState: 'idle' | 'done'
 }
 
 export function ResultPanel({
   environment,
-  measurement,
   result,
-  bestRun,
+  previousRun,
   isNewBest,
   onRetry,
+  onBackHome,
   onShare,
   shareState,
 }: Props) {
+  const diffMeters = previousRun
+    ? result.displayedDistanceMeters - previousRun.result.displayedDistanceMeters
+    : null
+
   return (
     <section className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center px-6 text-center">
-      <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Result</p>
+      <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Result Hub</p>
       <h2 className="mt-3 font-mono text-6xl font-bold text-cyan-100 sm:text-7xl">
         {result.displayedDistanceMeters.toFixed(1)} m
       </h2>
@@ -32,18 +36,12 @@ export function ResultPanel({
 
       <div className="mt-8 grid w-full gap-2 rounded-xl border border-white/10 bg-black/30 p-4 text-left text-sm text-white/80">
         <div>Max Speed: {result.displayedMaxSpeedKmh.toFixed(1)} km/h</div>
-        <div>Raw Delta: {measurement.rawDeltaTotal.toFixed(1)}</div>
-        <div>Normalized Delta: {measurement.normalizedDeltaTotal.toFixed(1)}</div>
-        <div>eventCount: {measurement.eventCount}</div>
-        <div>duration: {measurement.durationMs.toFixed(0)} ms</div>
-        <div>inferredInput: {measurement.inferredInputType}</div>
-        <div>inferenceConfidence: {Math.round(measurement.inferenceConfidence * 100)}%</div>
-        <div>trustedScore: {measurement.trustedScore.toFixed(2)}</div>
-        <div>anomalyFlags: {measurement.anomalyFlags.length > 0 ? measurement.anomalyFlags.join(', ') : '-'}</div>
-      </div>
-
-      <div className="mt-4 w-full text-left text-xs text-white/60">
-        Best: {bestRun ? `${bestRun.result.displayedDistanceMeters.toFixed(1)} m` : '-'}
+        <div>
+          Diff vs Previous:{' '}
+          {diffMeters === null ? '-' : `${diffMeters >= 0 ? '+' : ''}${diffMeters.toFixed(1)} m`}
+        </div>
+        <div>Input: {environment.effective.inputType}</div>
+        <div>Device: {environment.effective.deviceName || '-'}</div>
       </div>
 
       <div className="mt-6">
@@ -56,7 +54,7 @@ export function ResultPanel({
           onClick={onRetry}
           type="button"
         >
-          RETRY
+          REPLAY
         </button>
         <button
           className="rounded-xl border border-white/35 bg-white/5 px-6 py-3 font-mono text-white/85 transition hover:bg-white/15"
@@ -65,9 +63,14 @@ export function ResultPanel({
         >
           {shareState === 'done' ? 'COPIED' : 'SHARE'}
         </button>
+        <button
+          className="rounded-xl border border-white/35 bg-white/5 px-6 py-3 font-mono text-white/85 transition hover:bg-white/15"
+          onClick={onBackHome}
+          type="button"
+        >
+          HOME
+        </button>
       </div>
-
-      <p className="mt-3 text-xs text-white/45">Note: client-side trust scoring is heuristic, not absolute anti-cheat.</p>
     </section>
   )
 }
