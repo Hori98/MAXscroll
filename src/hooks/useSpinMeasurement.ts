@@ -20,6 +20,7 @@ type SessionState = {
   deltaMode: number
   trusted: boolean
   samples: number[]
+  intervals: number[]
 }
 
 const MIN_TOUCH_DELTA = 12
@@ -28,6 +29,8 @@ const MAX_WHEEL_MEASUREMENT_MS = 5000
 const BASE_GRACE_MS = 200
 const FREESPIN_GRACE_MS = 320
 const LOW_TAIL_GRACE_BONUS_MS = 120
+const MIN_SILENCE_MS = 260
+const MAX_SILENCE_MS = 900
 
 function variance(values: number[]): number {
   if (values.length === 0) return 0
@@ -87,6 +90,23 @@ function tailAverage(samples: number[]): number {
   return tail.reduce((sum, value) => sum + value, 0) / tail.length
 }
 
+function deriveSilenceMs(session: SessionState): number {
+  const inactivityMs = getWindowMs(session.samples)
+  const inferred = inferWheelInputType(session)
+  let graceMs = inferred.type === 'free-spin-wheel' ? FREESPIN_GRACE_MS : BASE_GRACE_MS
+  if (tailAverage(session.samples) < 3) {
+    graceMs += LOW_TAIL_GRACE_BONUS_MS
+  }
+
+  const avgInterval =
+    session.intervals.length > 0
+      ? session.intervals.reduce((sum, value) => sum + value, 0) / session.intervals.length
+      : 16
+
+  const adaptiveMs = avgInterval * 3 + graceMs
+  return Math.max(MIN_SILENCE_MS, Math.min(MAX_SILENCE_MS, Math.max(inactivityMs + graceMs, adaptiveMs)))
+}
+
 export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinMeasurementArgs) {
   const [isListening, setIsListening] = useState(false)
   const sessionRef = useRef<SessionState | null>(null)
@@ -143,6 +163,29 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
     onComplete(measurement)
   }, [clearTimer, onComplete])
 
+  const scheduleFinalizeCheck = useCallback(() => {
+    const runCheck = () => {
+      clearTimer()
+      const session = sessionRef.current
+      if (!session) return
+
+      const now = performance.now()
+      const maxEndTs = session.startTs + MAX_WHEEL_MEASUREMENT_MS
+      const silenceMs = deriveSilenceMs(session)
+      const idleMs = now - session.lastTs
+
+      if (now >= maxEndTs || idleMs >= silenceMs) {
+        flush()
+        return
+      }
+
+      const waitMs = Math.min(silenceMs - idleMs, maxEndTs - now)
+      timerRef.current = window.setTimeout(runCheck, Math.max(8, waitMs))
+    }
+
+    runCheck()
+  }, [clearTimer, flush])
+
   const onWheel = useCallback(
     (event: WheelEvent) => {
       if (!isListening) return
@@ -165,11 +208,20 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
           deltaMode: event.deltaMode,
           trusted: true,
           samples: [],
+          intervals: [],
         }
         onStart?.()
       }
 
       const session = sessionRef.current
+      const gap = now - session.lastTs
+      if (gap > 0) {
+        session.intervals.push(gap)
+        if (session.intervals.length > 12) {
+          session.intervals.shift()
+        }
+      }
+
       session.lastTs = now
       session.rawDeltaTotal += raw
       session.normalizedDeltaTotal += normalized
@@ -178,17 +230,9 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
       session.samples.push(raw)
       onProgress?.(buildProgress(session))
 
-      clearTimer()
-      const inactivityMs = getWindowMs(session.samples)
-      const inferred = inferWheelInputType(session)
-      let graceMs = inferred.type === 'free-spin-wheel' ? FREESPIN_GRACE_MS : BASE_GRACE_MS
-      if (tailAverage(session.samples) < 3) {
-        graceMs += LOW_TAIL_GRACE_BONUS_MS
-      }
-      const hardLimitLeft = Math.max(0, session.startTs + MAX_WHEEL_MEASUREMENT_MS - now)
-      timerRef.current = window.setTimeout(flush, Math.min(inactivityMs + graceMs, hardLimitLeft))
+      scheduleFinalizeCheck()
     },
-    [buildProgress, clearTimer, flush, isListening, onProgress, onStart],
+    [buildProgress, isListening, onProgress, onStart, scheduleFinalizeCheck],
   )
 
   const start = useCallback(() => {
@@ -269,7 +313,7 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
       window.removeEventListener('touchend', onTouchEnd)
       clearTimer()
     }
-  }, [clearTimer, isListening, onComplete, onProgress, onStart, onWheel])
+  }, [clearTimer, isListening, onComplete, onStart, onWheel])
 
   return { isListening, start, stop }
 }
