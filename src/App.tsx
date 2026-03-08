@@ -2,13 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { ArmedPanel } from './components/ArmedPanel'
 import { CountdownPanel } from './components/CountdownPanel'
-import { FlyingPanel } from './components/FlyingPanel'
 import { HomePanel } from './components/HomePanel'
 import { InterstitialAd } from './components/InterstitialAd'
 import { MeasuringPanel } from './components/MeasuringPanel'
 import { ResultPanel } from './components/ResultPanel'
 import { useSoundEffects } from './hooks/useSoundEffects'
 import { useSpinMeasurement } from './hooks/useSpinMeasurement'
+import { calcRunResultFromMeasurement } from './lib/calcRunResult'
 import { getEnvironmentProfile, makeEnvironmentProfile } from './lib/getEnvironment'
 import { buildShareImage } from './lib/shareImage'
 import {
@@ -90,7 +90,8 @@ function App() {
           prev.declared,
         ),
       )
-      setPhase('flying')
+      const nextResult = calcRunResultFromMeasurement(nextMeasurement)
+      onFlightComplete(nextResult, nextMeasurement)
     },
   })
 
@@ -117,11 +118,9 @@ function App() {
     })
   }
 
-  const onFlightComplete = (nextResult: RunResult) => {
-    if (!measurement) return
-
+  const onFlightComplete = (nextResult: RunResult, measured: SpinMeasurement) => {
     playResult()
-    const run = createSavedRun(environment, measurement, nextResult)
+    const run = createSavedRun(environment, measured, nextResult)
     saveLatestRun(run)
 
     const shouldUpdateBest = !bestRun || nextResult.displayedDistanceMeters > bestRun.result.displayedDistanceMeters
@@ -244,10 +243,6 @@ function App() {
 
   if (phase === 'measuring') {
     return <MeasuringPanel hasTouch={environment.detected.hasTouch} progress={measurementProgress} />
-  }
-
-  if (phase === 'flying' && measurement) {
-    return <FlyingPanel environment={environment} measurement={measurement} onComplete={onFlightComplete} />
   }
 
   if (phase === 'result' && measurement && result) {
