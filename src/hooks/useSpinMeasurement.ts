@@ -25,6 +25,9 @@ type SessionState = {
 const MIN_TOUCH_DELTA = 12
 const MAX_TOUCH_DURATION_MS = 700
 const MAX_WHEEL_MEASUREMENT_MS = 5000
+const BASE_GRACE_MS = 200
+const FREESPIN_GRACE_MS = 320
+const LOW_TAIL_GRACE_BONUS_MS = 120
 
 function variance(values: number[]): number {
   if (values.length === 0) return 0
@@ -76,6 +79,12 @@ function calcTrustedScore(trusted: boolean, anomalyFlags: string[]): number {
   if (!trusted) return 0
   const score = 1 - anomalyFlags.length * 0.2
   return Math.max(0, Math.min(1, score))
+}
+
+function tailAverage(samples: number[]): number {
+  if (samples.length === 0) return 0
+  const tail = samples.slice(-3)
+  return tail.reduce((sum, value) => sum + value, 0) / tail.length
 }
 
 export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinMeasurementArgs) {
@@ -171,8 +180,13 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
 
       clearTimer()
       const inactivityMs = getWindowMs(session.samples)
+      const inferred = inferWheelInputType(session)
+      let graceMs = inferred.type === 'free-spin-wheel' ? FREESPIN_GRACE_MS : BASE_GRACE_MS
+      if (tailAverage(session.samples) < 3) {
+        graceMs += LOW_TAIL_GRACE_BONUS_MS
+      }
       const hardLimitLeft = Math.max(0, session.startTs + MAX_WHEEL_MEASUREMENT_MS - now)
-      timerRef.current = window.setTimeout(flush, Math.min(inactivityMs, hardLimitLeft))
+      timerRef.current = window.setTimeout(flush, Math.min(inactivityMs + graceMs, hardLimitLeft))
     },
     [buildProgress, clearTimer, flush, isListening, onProgress, onStart],
   )
