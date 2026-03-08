@@ -11,6 +11,9 @@ export function EnvironmentBadge({ environment }: Props) {
       <div className="mt-1 text-[11px] text-cyan-100/60">
         {`${environment.viewportWidth}x${environment.viewportHeight} · ${environment.pointerType}`}
       </div>
+      <div className="mt-1 text-[11px] text-cyan-100/60">
+        {`${environment.inputType}${environment.deviceName ? ` · ${environment.deviceName}` : ''}`}
+      </div>
     </div>
   )
 }

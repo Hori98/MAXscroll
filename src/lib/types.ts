@@ -1,5 +1,13 @@
 export type Phase = 'home' | 'ready' | 'flying' | 'result'
 
+export type InputType =
+  | 'mouse-wheel'
+  | 'free-spin-wheel'
+  | 'trackpad'
+  | 'magic-mouse'
+  | 'touch'
+  | 'other'
+
 export type EnvironmentProfile = {
   osName: string
   browserName: string
@@ -13,6 +21,9 @@ export type EnvironmentProfile = {
   timezone: string
   hasTouch: boolean
   pointerType: 'fine' | 'coarse' | 'unknown'
+  inputType: InputType
+  deviceName: string
+  scrollSettingType: 'default' | 'custom' | 'unknown'
 }
 
 export type SpinMeasurement = {

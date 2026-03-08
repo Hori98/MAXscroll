@@ -8,6 +8,8 @@ type Props = {
   bestRun: SavedRun | null
   isNewBest: boolean
   onRetry: () => void
+  onShare: () => void
+  shareState: 'idle' | 'done'
 }
 
 export function ResultPanel({
@@ -17,6 +19,8 @@ export function ResultPanel({
   bestRun,
   isNewBest,
   onRetry,
+  onShare,
+  shareState,
 }: Props) {
   return (
     <section className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center px-6 text-center">
@@ -44,13 +48,22 @@ export function ResultPanel({
         <EnvironmentBadge environment={environment} />
       </div>
 
-      <button
-        className="mt-8 rounded-xl border border-cyan-300/70 bg-cyan-300/10 px-8 py-3 font-mono text-cyan-100 transition hover:bg-cyan-300/20"
-        onClick={onRetry}
-        type="button"
-      >
-        RETRY
-      </button>
+      <div className="mt-8 flex items-center gap-3">
+        <button
+          className="rounded-xl border border-cyan-300/70 bg-cyan-300/10 px-8 py-3 font-mono text-cyan-100 transition hover:bg-cyan-300/20"
+          onClick={onRetry}
+          type="button"
+        >
+          RETRY
+        </button>
+        <button
+          className="rounded-xl border border-white/35 bg-white/5 px-6 py-3 font-mono text-white/85 transition hover:bg-white/15"
+          onClick={onShare}
+          type="button"
+        >
+          {shareState === 'done' ? 'COPIED' : 'SHARE'}
+        </button>
+      </div>
     </section>
   )
 }

@@ -24,8 +24,16 @@ function getPointerType(): 'fine' | 'coarse' | 'unknown' {
   return 'unknown'
 }
 
+function inferInputType(profile: Pick<EnvironmentProfile, 'hasTouch' | 'pointerType'>): EnvironmentProfile['inputType'] {
+  if (profile.pointerType === 'fine') return 'mouse-wheel'
+  if (profile.hasTouch) return 'touch'
+  return 'other'
+}
+
 export function getEnvironmentProfile(): EnvironmentProfile {
   const ua = navigator.userAgent
+  const pointerType = getPointerType()
+  const hasTouch = navigator.maxTouchPoints > 0
 
   return {
     osName: getOsName(ua),
@@ -38,7 +46,10 @@ export function getEnvironmentProfile(): EnvironmentProfile {
     platform: navigator.platform,
     language: navigator.language,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    hasTouch: navigator.maxTouchPoints > 0,
-    pointerType: getPointerType(),
+    hasTouch,
+    pointerType,
+    inputType: inferInputType({ hasTouch, pointerType }),
+    deviceName: '',
+    scrollSettingType: 'unknown',
   }
 }
