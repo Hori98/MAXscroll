@@ -13,7 +13,6 @@ type UseSpinMeasurementArgs = {
 type SessionState = {
   startTs: number
   lastTs: number
-  deadlineTs: number
   rawDeltaTotal: number
   normalizedDeltaTotal: number
   maxSingleDelta: number
@@ -25,7 +24,7 @@ type SessionState = {
 
 const MIN_TOUCH_DELTA = 12
 const MAX_TOUCH_DURATION_MS = 700
-const MAX_WHEEL_MEASUREMENT_MS = TRACKPAD_WINDOW_MS
+const MAX_WHEEL_MEASUREMENT_MS = 5000
 
 function variance(values: number[]): number {
   if (values.length === 0) return 0
@@ -150,7 +149,6 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
         sessionRef.current = {
           startTs: now,
           lastTs: now,
-          deadlineTs: now + WHEEL_WINDOW_MS,
           rawDeltaTotal: 0,
           normalizedDeltaTotal: 0,
           maxSingleDelta: 0,
@@ -163,26 +161,18 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
       }
 
       const session = sessionRef.current
-      if (now >= session.deadlineTs) {
-        flush()
-        return
-      }
       session.lastTs = now
       session.rawDeltaTotal += raw
       session.normalizedDeltaTotal += normalized
       session.maxSingleDelta = Math.max(session.maxSingleDelta, raw)
       session.eventCount += 1
       session.samples.push(raw)
-
-      // Allow 150ms -> 300ms extension once for trackpad-like bursts, never beyond 300ms total.
-      const candidateWindow = getWindowMs(session.samples)
-      const maxDeadline = session.startTs + MAX_WHEEL_MEASUREMENT_MS
-      session.deadlineTs = Math.min(maxDeadline, session.startTs + candidateWindow)
-
       onProgress?.(buildProgress(session))
 
       clearTimer()
-      timerRef.current = window.setTimeout(flush, Math.max(0, session.deadlineTs - now))
+      const inactivityMs = getWindowMs(session.samples)
+      const hardLimitLeft = Math.max(0, session.startTs + MAX_WHEEL_MEASUREMENT_MS - now)
+      timerRef.current = window.setTimeout(flush, Math.min(inactivityMs, hardLimitLeft))
     },
     [buildProgress, clearTimer, flush, isListening, onProgress, onStart],
   )
