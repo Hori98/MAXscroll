@@ -1,4 +1,10 @@
-import type { EnvironmentProfile } from './types'
+import type {
+  DeclaredEnvironment,
+  DetectedEnvironment,
+  EnvironmentProfile,
+  InferredEnvironment,
+  InputType,
+} from './types'
 
 function getOsName(ua: string): string {
   if (/Windows/i.test(ua)) return 'Windows'
@@ -24,16 +30,30 @@ function getPointerType(): 'fine' | 'coarse' | 'unknown' {
   return 'unknown'
 }
 
-function inferInputType(profile: Pick<EnvironmentProfile, 'hasTouch' | 'pointerType'>): EnvironmentProfile['inputType'] {
-  if (profile.pointerType === 'fine') return 'mouse-wheel'
-  if (profile.hasTouch) return 'touch'
-  return 'other'
+export function resolveEffectiveInputType(declared: InputType | null, inferred: InputType): InputType {
+  return declared ?? inferred
 }
 
-export function getEnvironmentProfile(): EnvironmentProfile {
+export function makeEnvironmentProfile(
+  detected: DetectedEnvironment,
+  inferred: InferredEnvironment,
+  declared: DeclaredEnvironment,
+): EnvironmentProfile {
+  return {
+    detected,
+    inferred,
+    declared,
+    effective: {
+      inputType: resolveEffectiveInputType(declared.inputType, inferred.inputType),
+      deviceName: declared.deviceName,
+      scrollSettingType: declared.scrollSettingType,
+    },
+  }
+}
+
+export function getDetectedEnvironment(): DetectedEnvironment {
   const ua = navigator.userAgent
-  const pointerType = getPointerType()
-  const hasTouch = navigator.maxTouchPoints > 0
+  const uaData = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData
 
   return {
     osName: getOsName(ua),
@@ -43,13 +63,31 @@ export function getEnvironmentProfile(): EnvironmentProfile {
     viewportWidth: window.innerWidth,
     viewportHeight: window.innerHeight,
     devicePixelRatio: window.devicePixelRatio,
-    platform: navigator.platform,
+    platform: uaData?.platform ?? navigator.platform,
     language: navigator.language,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    hasTouch,
-    pointerType,
-    inputType: inferInputType({ hasTouch, pointerType }),
+    hasTouch: navigator.maxTouchPoints > 0,
+    pointerType: getPointerType(),
+  }
+}
+
+export function getInitialInferredEnvironment(detected: DetectedEnvironment): InferredEnvironment {
+  if (detected.hasTouch && detected.pointerType !== 'fine') {
+    return { inputType: 'touch', confidence: 0.85 }
+  }
+  if (detected.pointerType === 'fine') {
+    return { inputType: 'mouse-wheel', confidence: 0.6 }
+  }
+  return { inputType: 'other', confidence: 0.4 }
+}
+
+export function getEnvironmentProfile(): EnvironmentProfile {
+  const detected = getDetectedEnvironment()
+  const inferred = getInitialInferredEnvironment(detected)
+  const declared: DeclaredEnvironment = {
+    inputType: null,
     deviceName: '',
     scrollSettingType: 'unknown',
   }
+  return makeEnvironmentProfile(detected, inferred, declared)
 }

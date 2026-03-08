@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 
+import { ArmedPanel } from './components/ArmedPanel'
+import { CountdownPanel } from './components/CountdownPanel'
 import { FlyingPanel } from './components/FlyingPanel'
 import { HomePanel } from './components/HomePanel'
 import { InterstitialAd } from './components/InterstitialAd'
 import { ResultPanel } from './components/ResultPanel'
-import { useSpinMeasurement } from './hooks/useSpinMeasurement'
 import { useSoundEffects } from './hooks/useSoundEffects'
-import { getEnvironmentProfile } from './lib/getEnvironment'
+import { useSpinMeasurement } from './hooks/useSpinMeasurement'
+import { getEnvironmentProfile, makeEnvironmentProfile } from './lib/getEnvironment'
 import { buildShareImage } from './lib/shareImage'
 import {
   getBestRun,
@@ -15,7 +17,14 @@ import {
   saveEnvironment,
   saveLatestRun,
 } from './lib/storage'
-import type { EnvironmentProfile, Phase, RunResult, SavedRun, SpinMeasurement } from './lib/types'
+import type {
+  DeclaredEnvironment,
+  EnvironmentProfile,
+  Phase,
+  RunResult,
+  SavedRun,
+  SpinMeasurement,
+} from './lib/types'
 
 function createSavedRun(
   environment: SavedRun['environment'],
@@ -31,26 +40,25 @@ function createSavedRun(
   }
 }
 
-function mergeEnvironment(base: EnvironmentProfile, saved: Partial<EnvironmentProfile> | null): EnvironmentProfile {
-  if (!saved) return base
-  return {
-    ...base,
-    ...saved,
-    inputType: saved.inputType ?? base.inputType,
-    deviceName: saved.deviceName ?? base.deviceName,
-    scrollSettingType: saved.scrollSettingType ?? base.scrollSettingType,
-  }
+function mergeDeclaredEnvironment(base: EnvironmentProfile, declared: DeclaredEnvironment | null): EnvironmentProfile {
+  if (!declared) return base
+  return makeEnvironmentProfile(base.detected, base.inferred, {
+    inputType: declared.inputType,
+    deviceName: declared.deviceName,
+    scrollSettingType: declared.scrollSettingType,
+  })
 }
 
 function App() {
   const initialEnvironment = useMemo(() => {
     const auto = getEnvironmentProfile()
     const saved = getSavedEnvironment()
-    return mergeEnvironment(auto, saved)
+    return mergeDeclaredEnvironment(auto, saved)
   }, [])
 
   const [environment, setEnvironment] = useState<EnvironmentProfile>(initialEnvironment)
   const [phase, setPhase] = useState<Phase>('home')
+  const [countdown, setCountdown] = useState(3)
   const [measurement, setMeasurement] = useState<SpinMeasurement | null>(null)
   const [result, setResult] = useState<RunResult | null>(null)
   const [isNewBest, setIsNewBest] = useState(false)
@@ -59,31 +67,42 @@ function App() {
   const [bestRun, setBestRun] = useState<SavedRun | null>(() => getBestRun())
   const { playLaunch, playResult, playClick } = useSoundEffects()
 
-  const { isListening, start, stop } = useSpinMeasurement({
+  const { start, stop } = useSpinMeasurement({
     onComplete: (nextMeasurement) => {
       setMeasurement(nextMeasurement)
+      setEnvironment((prev) =>
+        makeEnvironmentProfile(
+          prev.detected,
+          {
+            inputType: nextMeasurement.inferredInputType,
+            confidence: nextMeasurement.inferenceConfidence,
+          },
+          prev.declared,
+        ),
+      )
       setPhase('flying')
     },
   })
 
   const onLaunch = () => {
     playLaunch()
-    setPhase('ready')
+    stop()
     setResult(null)
     setMeasurement(null)
     setIsNewBest(false)
     setShareState('idle')
-    start()
+    setCountdown(3)
+    setPhase('countdown')
   }
 
-  const onEnvironmentChange = (patch: Partial<EnvironmentProfile>) => {
-    const next = { ...environment, ...patch }
-    setEnvironment(next)
-    saveEnvironment({
-      inputType: next.inputType,
-      deviceName: next.deviceName,
-      scrollSettingType: next.scrollSettingType,
-    })
+  const onEnvironmentChange = (patch: Partial<DeclaredEnvironment>) => {
+    const nextDeclared: DeclaredEnvironment = {
+      ...environment.declared,
+      ...patch,
+    }
+
+    setEnvironment(makeEnvironmentProfile(environment.detected, environment.inferred, nextDeclared))
+    saveEnvironment(nextDeclared)
   }
 
   const onFlightComplete = (nextResult: RunResult) => {
@@ -108,7 +127,7 @@ function App() {
   const onShare = async () => {
     if (!result) return
 
-    const text = `SPIN LAUNCH ${result.displayedDistanceMeters.toFixed(1)}m | max ${result.displayedMaxSpeedKmh.toFixed(1)}km/h | ${environment.osName}/${environment.browserName}/${environment.inputType}`
+    const text = `SPIN LAUNCH ${result.displayedDistanceMeters.toFixed(1)}m | max ${result.displayedMaxSpeedKmh.toFixed(1)}km/h | ${environment.detected.osName}/${environment.detected.browserName}/${environment.effective.inputType}`
     const imageFile = await buildShareImage(result, environment)
 
     if (navigator.share && imageFile && navigator.canShare?.({ files: [imageFile] })) {
@@ -161,20 +180,47 @@ function App() {
     return () => window.clearTimeout(timer)
   }, [adCountdown, phase])
 
+  useEffect(() => {
+    if (phase !== 'countdown') return
+
+    if (countdown <= 1) {
+      const timer = window.setTimeout(() => {
+        setPhase('armed')
+      }, 1000)
+      return () => window.clearTimeout(timer)
+    }
+
+    const timer = window.setTimeout(() => setCountdown((prev) => prev - 1), 1000)
+    return () => window.clearTimeout(timer)
+  }, [countdown, phase])
+
+  useEffect(() => {
+    if (phase !== 'armed') return
+    start()
+    return () => stop()
+  }, [phase, start, stop])
+
   if (phase === 'interstitial') {
     return <InterstitialAd onContinue={onCloseInterstitial} secondsLeft={adCountdown} />
   }
 
-  if (phase === 'home' || phase === 'ready') {
+  if (phase === 'home') {
     return (
       <HomePanel
         environment={environment}
         bestRun={bestRun}
-        isReady={isListening}
         onLaunch={onLaunch}
         onEnvironmentChange={onEnvironmentChange}
       />
     )
+  }
+
+  if (phase === 'countdown') {
+    return <CountdownPanel count={countdown} />
+  }
+
+  if (phase === 'armed') {
+    return <ArmedPanel hasTouch={environment.detected.hasTouch} />
   }
 
   if (phase === 'flying' && measurement) {

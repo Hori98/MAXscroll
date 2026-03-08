@@ -34,10 +34,12 @@ export function ResultPanel({
         <div>Max Speed: {result.displayedMaxSpeedKmh.toFixed(1)} km/h</div>
         <div>Raw Delta: {measurement.rawDeltaTotal.toFixed(1)}</div>
         <div>Normalized Delta: {measurement.normalizedDeltaTotal.toFixed(1)}</div>
-        <div>deltaMode: {measurement.deltaMode}</div>
         <div>eventCount: {measurement.eventCount}</div>
         <div>duration: {measurement.durationMs.toFixed(0)} ms</div>
-        <div>trusted: {String(measurement.trusted)}</div>
+        <div>inferredInput: {measurement.inferredInputType}</div>
+        <div>inferenceConfidence: {Math.round(measurement.inferenceConfidence * 100)}%</div>
+        <div>trustedScore: {measurement.trustedScore.toFixed(2)}</div>
+        <div>anomalyFlags: {measurement.anomalyFlags.length > 0 ? measurement.anomalyFlags.join(', ') : '-'}</div>
       </div>
 
       <div className="mt-4 w-full text-left text-xs text-white/60">
@@ -64,6 +66,8 @@ export function ResultPanel({
           {shareState === 'done' ? 'COPIED' : 'SHARE'}
         </button>
       </div>
+
+      <p className="mt-3 text-xs text-white/45">Note: client-side trust scoring is heuristic, not absolute anti-cheat.</p>
     </section>
   )
 }

@@ -27,7 +27,11 @@ export async function buildShareImage(result: RunResult, environment: Environmen
   ctx.fillStyle = '#9dd6ff'
   ctx.font = '500 42px "Space Grotesk", sans-serif'
   ctx.fillText(`Max Speed ${result.displayedMaxSpeedKmh.toFixed(1)} km/h`, 110, 408)
-  ctx.fillText(`${environment.osName} / ${environment.browserName} / ${environment.inputType}`, 110, 468)
+  ctx.fillText(
+    `${environment.detected.osName} / ${environment.detected.browserName} / ${environment.effective.inputType}`,
+    110,
+    468,
+  )
 
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
   if (!blob) return null

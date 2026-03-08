@@ -1,4 +1,4 @@
-export type Phase = 'home' | 'ready' | 'flying' | 'result' | 'interstitial'
+export type Phase = 'home' | 'countdown' | 'armed' | 'flying' | 'result' | 'interstitial'
 
 export type InputType =
   | 'mouse-wheel'
@@ -8,7 +8,7 @@ export type InputType =
   | 'touch'
   | 'other'
 
-export type EnvironmentProfile = {
+export type DetectedEnvironment = {
   osName: string
   browserName: string
   screenWidth: number
@@ -21,9 +21,30 @@ export type EnvironmentProfile = {
   timezone: string
   hasTouch: boolean
   pointerType: 'fine' | 'coarse' | 'unknown'
+}
+
+export type InferredEnvironment = {
+  inputType: InputType
+  confidence: number
+}
+
+export type DeclaredEnvironment = {
+  inputType: InputType | null
+  deviceName: string
+  scrollSettingType: 'default' | 'custom' | 'unknown'
+}
+
+export type EffectiveEnvironment = {
   inputType: InputType
   deviceName: string
   scrollSettingType: 'default' | 'custom' | 'unknown'
+}
+
+export type EnvironmentProfile = {
+  detected: DetectedEnvironment
+  inferred: InferredEnvironment
+  declared: DeclaredEnvironment
+  effective: EffectiveEnvironment
 }
 
 export type SpinMeasurement = {
@@ -34,6 +55,10 @@ export type SpinMeasurement = {
   deltaMode: number
   durationMs: number
   trusted: boolean
+  inferredInputType: InputType
+  inferenceConfidence: number
+  anomalyFlags: string[]
+  trustedScore: number
 }
 
 export type RunResult = {

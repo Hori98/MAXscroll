@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { TRACKPAD_WINDOW_MS, WHEEL_WINDOW_MS } from '../lib/constants'
 import { normalizeDelta } from '../lib/normalizeDelta'
-import type { SpinMeasurement } from '../lib/types'
+import type { InputType, SpinMeasurement } from '../lib/types'
 
 type UseSpinMeasurementArgs = {
   onComplete: (measurement: SpinMeasurement) => void
@@ -36,6 +36,45 @@ function getWindowMs(samples: number[]): number {
   return isTrackpadLike ? TRACKPAD_WINDOW_MS : WHEEL_WINDOW_MS
 }
 
+function inferWheelInputType(session: SessionState): { type: InputType; confidence: number } {
+  const dur = Math.max(1, session.lastTs - session.startTs)
+  const sampleVariance = variance(session.samples)
+  const mean = session.samples.reduce((sum, value) => sum + value, 0) / Math.max(1, session.samples.length)
+
+  if (session.eventCount >= 7 && dur > 250 && mean > 30) {
+    return { type: 'free-spin-wheel', confidence: 0.82 }
+  }
+  if (session.eventCount >= 4 && dur > 120 && mean < 35 && sampleVariance < 500) {
+    return { type: 'trackpad', confidence: 0.84 }
+  }
+  if (session.eventCount <= 3 && mean >= 35) {
+    return { type: 'mouse-wheel', confidence: 0.8 }
+  }
+  return { type: 'other', confidence: 0.5 }
+}
+
+function buildAnomalyFlags(args: {
+  trusted: boolean
+  durationMs: number
+  normalizedDeltaTotal: number
+  rawDeltaTotal: number
+  eventCount: number
+}): string[] {
+  const flags: string[] = []
+  if (!args.trusted) flags.push('untrusted_event')
+  if (args.durationMs <= 0) flags.push('invalid_duration')
+  if (args.durationMs < 6 && args.eventCount > 2) flags.push('impossible_burst')
+  if (args.eventCount > 80) flags.push('excessive_events')
+  if (args.normalizedDeltaTotal > 25000 || args.rawDeltaTotal > 9000) flags.push('extreme_delta')
+  return flags
+}
+
+function calcTrustedScore(trusted: boolean, anomalyFlags: string[]): number {
+  if (!trusted) return 0
+  const score = 1 - anomalyFlags.length * 0.2
+  return Math.max(0, Math.min(1, score))
+}
+
 export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
   const [isListening, setIsListening] = useState(false)
   const sessionRef = useRef<SessionState | null>(null)
@@ -53,14 +92,28 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
     const session = sessionRef.current
     if (!session) return
 
+    const durationMs = Math.max(0, session.lastTs - session.startTs)
+    const inferred = inferWheelInputType(session)
+    const anomalyFlags = buildAnomalyFlags({
+      trusted: session.trusted,
+      durationMs,
+      normalizedDeltaTotal: session.normalizedDeltaTotal,
+      rawDeltaTotal: session.rawDeltaTotal,
+      eventCount: session.eventCount,
+    })
+
     const measurement: SpinMeasurement = {
       rawDeltaTotal: session.rawDeltaTotal,
       normalizedDeltaTotal: session.normalizedDeltaTotal,
       maxSingleDelta: session.maxSingleDelta,
       eventCount: session.eventCount,
       deltaMode: session.deltaMode,
-      durationMs: Math.max(0, session.lastTs - session.startTs),
+      durationMs,
       trusted: session.trusted,
+      inferredInputType: inferred.type,
+      inferenceConfidence: inferred.confidence,
+      anomalyFlags,
+      trustedScore: calcTrustedScore(session.trusted, anomalyFlags),
     }
 
     sessionRef.current = null
@@ -148,6 +201,13 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
 
       const velocity = delta / durationMs
       const normalized = delta * 3.8 + velocity * 300
+      const anomalyFlags = buildAnomalyFlags({
+        trusted: true,
+        durationMs,
+        normalizedDeltaTotal: normalized,
+        rawDeltaTotal: delta,
+        eventCount: 1,
+      })
 
       touchStartRef.current = null
       setIsListening(false)
@@ -159,6 +219,10 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
         deltaMode: 0,
         durationMs,
         trusted: true,
+        inferredInputType: 'touch',
+        inferenceConfidence: 0.95,
+        anomalyFlags,
+        trustedScore: calcTrustedScore(true, anomalyFlags),
       })
     }
 
@@ -166,6 +230,7 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
     window.addEventListener('touchstart', onTouchStart, { passive: true })
     window.addEventListener('touchmove', onTouchMove, { passive: false })
     window.addEventListener('touchend', onTouchEnd, { passive: true })
+
     return () => {
       window.removeEventListener('wheel', onWheel)
       window.removeEventListener('touchstart', onTouchStart)

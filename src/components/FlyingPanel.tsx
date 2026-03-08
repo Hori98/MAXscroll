@@ -84,7 +84,7 @@ export function FlyingPanel({ environment, measurement, onComplete }: Props) {
       </div>
 
       <div className="absolute bottom-8 rounded-md bg-black/35 px-3 py-2 text-xs text-cyan-100/65">
-        {environment.osName} / {environment.browserName} / {environment.inputType}
+        {environment.detected.osName} / {environment.detected.browserName} / {environment.effective.inputType}
       </div>
 
       <div ref={distanceRef} className="relative z-10 font-mono text-6xl font-bold tracking-tight text-cyan-100 sm:text-8xl">
