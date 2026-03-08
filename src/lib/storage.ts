@@ -2,6 +2,7 @@ import { makeEnvironmentProfile } from './getEnvironment'
 import type {
   DeclaredEnvironment,
   EnvironmentProfile,
+  RunResult,
   SavedRun,
   SpinMeasurement,
   InputType,
@@ -144,12 +145,21 @@ function normalizeRun(raw: unknown): SavedRun | null {
 
   if (!value.result || typeof value.result !== 'object') return null
 
+  const rawResult = value.result as Partial<RunResult>
+  const normalizedResult: RunResult = {
+    finalDistance: rawResult.finalDistance ?? 0,
+    maxSpeed: rawResult.maxSpeed ?? 0,
+    initialSpeed: rawResult.initialSpeed ?? 0,
+    displayedDistanceMeters: rawResult.displayedDistanceMeters ?? 0,
+    displayedMaxSpeedKmh: rawResult.displayedMaxSpeedKmh ?? 0,
+  }
+
   return {
     id: typeof value.id === 'string' ? value.id : crypto.randomUUID(),
     createdAt: typeof value.createdAt === 'string' ? value.createdAt : new Date(0).toISOString(),
     environment: normalizeEnvironment(value.environment),
     measurement: normalizeMeasurement(value.measurement),
-    result: value.result,
+    result: normalizedResult,
   }
 }
 

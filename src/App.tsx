@@ -96,13 +96,14 @@ function App() {
   }
 
   const onEnvironmentChange = (patch: Partial<DeclaredEnvironment>) => {
-    const nextDeclared: DeclaredEnvironment = {
-      ...environment.declared,
-      ...patch,
-    }
-
-    setEnvironment(makeEnvironmentProfile(environment.detected, environment.inferred, nextDeclared))
-    saveEnvironment(nextDeclared)
+    setEnvironment((prev) => {
+      const nextDeclared: DeclaredEnvironment = {
+        ...prev.declared,
+        ...patch,
+      }
+      saveEnvironment(nextDeclared)
+      return makeEnvironmentProfile(prev.detected, prev.inferred, nextDeclared)
+    })
   }
 
   const onFlightComplete = (nextResult: RunResult) => {
