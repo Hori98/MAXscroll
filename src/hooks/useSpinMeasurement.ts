@@ -20,6 +20,9 @@ type SessionState = {
   samples: number[]
 }
 
+const MIN_TOUCH_DELTA = 12
+const MAX_TOUCH_DURATION_MS = 700
+
 function variance(values: number[]): number {
   if (values.length === 0) return 0
   const mean = values.reduce((sum, value) => sum + value, 0) / values.length
@@ -141,10 +144,10 @@ export function useSpinMeasurement({ onComplete }: UseSpinMeasurementArgs) {
       const endY = event.changedTouches[0].clientY
       const durationMs = Math.max(1, performance.now() - startPoint.ts)
       const delta = Math.abs(startPoint.y - endY)
-      if (delta < 4) return
+      if (delta < MIN_TOUCH_DELTA || durationMs > MAX_TOUCH_DURATION_MS) return
 
       const velocity = delta / durationMs
-      const normalized = delta * 4 + velocity * 240
+      const normalized = delta * 3.8 + velocity * 300
 
       touchStartRef.current = null
       setIsListening(false)

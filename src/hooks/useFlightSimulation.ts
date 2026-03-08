@@ -14,7 +14,7 @@ type UseFlightSimulationArgs = {
   measurement: SpinMeasurement
   distanceRef: RefObject<HTMLDivElement | null>
   speedRef: RefObject<HTMLDivElement | null>
-  onFrame?: (speedKmh: number) => void
+  onFrame?: (speedKmh: number, distanceMeters: number) => void
   onComplete: (result: RunResult) => void
 }
 
@@ -52,7 +52,7 @@ export function useFlightSimulation({
       if (speedRef.current) {
         speedRef.current.textContent = `${Math.max(0, kmh).toFixed(1)} km/h`
       }
-      onFrame?.(kmh)
+      onFrame?.(kmh, meters)
 
       if (speed < SPEED_THRESHOLD) {
         onComplete({

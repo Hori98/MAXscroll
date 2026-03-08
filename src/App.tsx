@@ -7,6 +7,7 @@ import { ResultPanel } from './components/ResultPanel'
 import { useSpinMeasurement } from './hooks/useSpinMeasurement'
 import { useSoundEffects } from './hooks/useSoundEffects'
 import { getEnvironmentProfile } from './lib/getEnvironment'
+import { buildShareImage } from './lib/shareImage'
 import {
   getBestRun,
   getSavedEnvironment,
@@ -108,6 +109,21 @@ function App() {
     if (!result) return
 
     const text = `SPIN LAUNCH ${result.displayedDistanceMeters.toFixed(1)}m | max ${result.displayedMaxSpeedKmh.toFixed(1)}km/h | ${environment.osName}/${environment.browserName}/${environment.inputType}`
+    const imageFile = await buildShareImage(result, environment)
+
+    if (navigator.share && imageFile && navigator.canShare?.({ files: [imageFile] })) {
+      try {
+        await navigator.share({
+          title: 'SPIN LAUNCH',
+          text,
+          files: [imageFile],
+          url: window.location.href,
+        })
+        return
+      } catch {
+        // Fall back to text share/clipboard.
+      }
+    }
 
     if (navigator.share) {
       try {

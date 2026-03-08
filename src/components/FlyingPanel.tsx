@@ -13,10 +13,11 @@ export function FlyingPanel({ environment, measurement, onComplete }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const layerNearRef = useRef<HTMLDivElement | null>(null)
   const layerFarRef = useRef<HTMLDivElement | null>(null)
+  const objectRef = useRef<HTMLDivElement | null>(null)
   const distanceRef = useRef<HTMLDivElement | null>(null)
   const speedRef = useRef<HTMLDivElement | null>(null)
 
-  const onFrame = useCallback((speedKmh: number) => {
+  const onFrame = useCallback((speedKmh: number, distanceMeters: number) => {
     const ratio = Math.min(1, Math.max(0, speedKmh / 600))
     const hueA = 200 - ratio * 80
     const hueB = 230 + ratio * 25
@@ -33,6 +34,13 @@ export function FlyingPanel({ environment, measurement, onComplete }: Props) {
     if (layerNearRef.current) {
       layerNearRef.current.style.transform = `translate3d(0, ${shiftNear}px, 0)`
       layerNearRef.current.style.opacity = `${0.15 + ratio * 0.35}`
+    }
+
+    if (objectRef.current) {
+      const x = Math.min(65, distanceMeters * 0.08)
+      const y = Math.sin(distanceMeters * 0.06) * 8
+      const rot = 18 - ratio * 22
+      objectRef.current.style.transform = `translate3d(${x}vw, ${y}px, 0) rotate(${rot}deg)`
     }
   }, [])
 
@@ -57,6 +65,12 @@ export function FlyingPanel({ environment, measurement, onComplete }: Props) {
         ref={layerNearRef}
         className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_75%,rgba(56,242,184,0.42),transparent_35%),radial-gradient(circle_at_35%_15%,rgba(60,167,255,0.35),transparent_30%)] transition-transform duration-100"
       />
+      <div
+        ref={objectRef}
+        className="pointer-events-none absolute left-[8vw] top-1/2 z-10 font-mono text-3xl text-cyan-100 transition-transform duration-75"
+      >
+        ▶
+      </div>
 
       <div className="absolute left-6 top-6 rounded-md bg-black/35 px-3 py-2 font-mono text-xs text-cyan-100/80">
         Spin Power: {measurement.normalizedDeltaTotal.toFixed(1)}
