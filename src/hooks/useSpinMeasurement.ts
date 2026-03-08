@@ -13,6 +13,7 @@ type UseSpinMeasurementArgs = {
 type SessionState = {
   startTs: number
   lastTs: number
+  deadlineTs: number
   rawDeltaTotal: number
   normalizedDeltaTotal: number
   maxSingleDelta: number
@@ -24,8 +25,7 @@ type SessionState = {
 
 const MIN_TOUCH_DELTA = 12
 const MAX_TOUCH_DURATION_MS = 700
-const MAX_WHEEL_MEASUREMENT_MS = 450
-const MAX_INTER_EVENT_GAP_MS = 90
+const MAX_WHEEL_MEASUREMENT_MS = TRACKPAD_WINDOW_MS
 
 function variance(values: number[]): number {
   if (values.length === 0) return 0
@@ -83,20 +83,12 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
   const [isListening, setIsListening] = useState(false)
   const sessionRef = useRef<SessionState | null>(null)
   const timerRef = useRef<number | null>(null)
-  const hardTimerRef = useRef<number | null>(null)
   const touchStartRef = useRef<{ y: number; ts: number } | null>(null)
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current)
       timerRef.current = null
-    }
-  }, [])
-
-  const clearHardTimer = useCallback(() => {
-    if (hardTimerRef.current !== null) {
-      window.clearTimeout(hardTimerRef.current)
-      hardTimerRef.current = null
     }
   }, [])
 
@@ -139,10 +131,9 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
 
     sessionRef.current = null
     clearTimer()
-    clearHardTimer()
     setIsListening(false)
     onComplete(measurement)
-  }, [clearHardTimer, clearTimer, onComplete])
+  }, [clearTimer, onComplete])
 
   const onWheel = useCallback(
     (event: WheelEvent) => {
@@ -159,6 +150,7 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
         sessionRef.current = {
           startTs: now,
           lastTs: now,
+          deadlineTs: now + WHEEL_WINDOW_MS,
           rawDeltaTotal: 0,
           normalizedDeltaTotal: 0,
           maxSingleDelta: 0,
@@ -168,12 +160,11 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
           samples: [],
         }
         onStart?.()
-        clearHardTimer()
-        hardTimerRef.current = window.setTimeout(flush, MAX_WHEEL_MEASUREMENT_MS)
       }
 
       const session = sessionRef.current
-      if (now - session.lastTs > MAX_INTER_EVENT_GAP_MS) {
+      if (now >= session.deadlineTs) {
+        flush()
         return
       }
       session.lastTs = now
@@ -182,29 +173,33 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
       session.maxSingleDelta = Math.max(session.maxSingleDelta, raw)
       session.eventCount += 1
       session.samples.push(raw)
+
+      // Allow 150ms -> 300ms extension once for trackpad-like bursts, never beyond 300ms total.
+      const candidateWindow = getWindowMs(session.samples)
+      const maxDeadline = session.startTs + MAX_WHEEL_MEASUREMENT_MS
+      session.deadlineTs = Math.min(maxDeadline, session.startTs + candidateWindow)
+
       onProgress?.(buildProgress(session))
 
       clearTimer()
-      timerRef.current = window.setTimeout(flush, getWindowMs(session.samples))
+      timerRef.current = window.setTimeout(flush, Math.max(0, session.deadlineTs - now))
     },
-    [buildProgress, clearHardTimer, clearTimer, flush, isListening, onProgress, onStart],
+    [buildProgress, clearTimer, flush, isListening, onProgress, onStart],
   )
 
   const start = useCallback(() => {
     sessionRef.current = null
     touchStartRef.current = null
     clearTimer()
-    clearHardTimer()
     setIsListening(true)
-  }, [clearHardTimer, clearTimer])
+  }, [clearTimer])
 
   const stop = useCallback(() => {
     sessionRef.current = null
     touchStartRef.current = null
     clearTimer()
-    clearHardTimer()
     setIsListening(false)
-  }, [clearHardTimer, clearTimer])
+  }, [clearTimer])
 
   useEffect(() => {
     const onTouchStart = (event: TouchEvent) => {
@@ -243,7 +238,6 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
 
       touchStartRef.current = null
       setIsListening(false)
-      clearHardTimer()
       onComplete({
         rawDeltaTotal: delta,
         normalizedDeltaTotal: normalized,
@@ -270,9 +264,8 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
       window.removeEventListener('touchmove', onTouchMove)
       window.removeEventListener('touchend', onTouchEnd)
       clearTimer()
-      clearHardTimer()
     }
-  }, [clearHardTimer, clearTimer, isListening, onComplete, onProgress, onStart, onWheel])
+  }, [clearTimer, isListening, onComplete, onProgress, onStart, onWheel])
 
   return { isListening, start, stop }
 }
