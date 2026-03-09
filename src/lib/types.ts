@@ -31,13 +31,11 @@ export type InferredEnvironment = {
 export type DeclaredEnvironment = {
   inputType: InputType | null
   deviceName: string
-  scrollSettingType: 'default' | 'custom' | 'unknown'
 }
 
 export type EffectiveEnvironment = {
   inputType: InputType
   deviceName: string
-  scrollSettingType: 'default' | 'custom' | 'unknown'
 }
 
 export type EnvironmentProfile = {

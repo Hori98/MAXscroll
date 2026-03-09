@@ -27,7 +27,6 @@ type LegacyEnvironment = {
   pointerType?: 'fine' | 'coarse' | 'unknown'
   inputType?: InputType
   deviceName?: string
-  scrollSettingType?: 'default' | 'custom' | 'unknown'
 }
 
 function safeParse<T>(raw: string | null): T | null {
@@ -58,14 +57,12 @@ function toDeclaredEnvironment(input: unknown): DeclaredEnvironment | null {
     return {
       inputType: declared.inputType ?? null,
       deviceName: declared.deviceName ?? '',
-      scrollSettingType: declared.scrollSettingType ?? 'unknown',
     }
   }
 
   return {
     inputType: value.inputType ?? null,
     deviceName: value.deviceName ?? '',
-    scrollSettingType: value.scrollSettingType ?? 'unknown',
   }
 }
 
@@ -108,7 +105,7 @@ function normalizeEnvironment(raw: unknown): EnvironmentProfile {
     return makeEnvironmentProfile(
       detected,
       { inputType: 'other', confidence: 0 },
-      { inputType: null, deviceName: '', scrollSettingType: 'unknown' },
+      { inputType: null, deviceName: '' },
     )
   }
 
@@ -124,12 +121,10 @@ function normalizeEnvironment(raw: unknown): EnvironmentProfile {
       declared: {
         inputType: env.declared.inputType ?? null,
         deviceName: env.declared.deviceName ?? '',
-        scrollSettingType: env.declared.scrollSettingType ?? 'unknown',
       },
       effective: {
         inputType: env.effective.inputType ?? env.inferred.inputType ?? 'other',
         deviceName: env.effective.deviceName ?? env.declared.deviceName ?? '',
-        scrollSettingType: env.effective.scrollSettingType ?? env.declared.scrollSettingType ?? 'unknown',
       },
     }
   }
@@ -142,7 +137,6 @@ function normalizeEnvironment(raw: unknown): EnvironmentProfile {
     {
       inputType: legacy.inputType ?? null,
       deviceName: legacy.deviceName ?? '',
-      scrollSettingType: legacy.scrollSettingType ?? 'unknown',
     },
   )
 }

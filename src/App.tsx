@@ -43,7 +43,6 @@ function mergeDeclaredEnvironment(base: EnvironmentProfile, declared: DeclaredEn
   return makeEnvironmentProfile(base.detected, base.inferred, {
     inputType: declared.inputType,
     deviceName: declared.deviceName,
-    scrollSettingType: declared.scrollSettingType,
   })
 }
 

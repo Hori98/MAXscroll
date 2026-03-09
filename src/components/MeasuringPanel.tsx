@@ -19,13 +19,6 @@ export function MeasuringPanel({ progress, hasTouch }: Props) {
       <p className="mt-3 font-mono text-lg font-semibold text-red-400">
         Spins: {progress?.eventCount ?? 0}
       </p>
-
-      <div className="mt-8 grid w-full max-w-md gap-2 rounded-xl border border-white/10 bg-black/30 p-4 text-left text-sm text-white/80">
-        <div>Raw Delta: {progress ? progress.rawDeltaTotal.toFixed(1) : '0.0'}</div>
-        <div>Normalized Delta: {progress ? progress.normalizedDeltaTotal.toFixed(1) : '0.0'}</div>
-        <div>Event Count: {progress?.eventCount ?? 0}</div>
-        <div>Duration: {progress ? `${progress.durationMs.toFixed(0)} ms` : '0 ms'}</div>
-      </div>
     </section>
   )
 }

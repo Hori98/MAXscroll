@@ -46,7 +46,6 @@ export function makeEnvironmentProfile(
     effective: {
       inputType: resolveEffectiveInputType(declared.inputType, inferred.inputType),
       deviceName: declared.deviceName,
-      scrollSettingType: declared.scrollSettingType,
     },
   }
 }
@@ -87,7 +86,6 @@ export function getEnvironmentProfile(): EnvironmentProfile {
   const declared: DeclaredEnvironment = {
     inputType: null,
     deviceName: '',
-    scrollSettingType: 'unknown',
   }
   return makeEnvironmentProfile(detected, inferred, declared)
 }
