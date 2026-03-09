@@ -26,7 +26,6 @@ type SessionState = {
 
 const MIN_TOUCH_DELTA = 12
 const MAX_TOUCH_DURATION_MS = 700
-const MAX_WHEEL_MEASUREMENT_MS = 12000
 const BASE_GRACE_MS = 200
 const FREESPIN_GRACE_MS = 320
 const LOW_TAIL_GRACE_BONUS_MS = 120
@@ -171,16 +170,15 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
       if (!session) return
 
       const now = performance.now()
-      const maxEndTs = session.startTs + MAX_WHEEL_MEASUREMENT_MS
       const silenceMs = deriveSilenceMs(session)
       const idleMs = now - session.lastTs
 
-      if (now >= maxEndTs || idleMs >= silenceMs) {
+      if (idleMs >= silenceMs) {
         flush()
         return
       }
 
-      const waitMs = Math.min(silenceMs - idleMs, maxEndTs - now)
+      const waitMs = silenceMs - idleMs
       timerRef.current = window.setTimeout(runCheck, Math.max(8, waitMs))
     }
 
