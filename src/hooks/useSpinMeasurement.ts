@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { TRACKPAD_WINDOW_MS, WHEEL_WINDOW_MS } from '../lib/constants'
 import { normalizeDelta } from '../lib/normalizeDelta'
-import type { InputType, SpinMeasurement, SpinMeasurementProgress } from '../lib/types'
+import type { SpinMeasurement, SpinMeasurementProgress } from '../lib/types'
 
 type UseSpinMeasurementArgs = {
   onStart?: () => void
@@ -14,6 +13,7 @@ type UseSpinMeasurementArgs = {
 type SessionState = {
   startTs: number
   lastTs: number
+  lastSignificantUpdateAt: number
   rawDeltaTotal: number
   normalizedDeltaTotal: number
   maxSingleDelta: number
@@ -21,16 +21,12 @@ type SessionState = {
   deltaMode: number
   trusted: boolean
   samples: number[]
-  intervals: number[]
 }
 
+const STOP_AFTER_MS = 1000
+const SIGNIFICANT_DELTA_EPS = 0.8
 const MIN_TOUCH_DELTA = 12
 const MAX_TOUCH_DURATION_MS = 700
-const BASE_GRACE_MS = 200
-const FREESPIN_GRACE_MS = 320
-const LOW_TAIL_GRACE_BONUS_MS = 120
-const MIN_SILENCE_MS = 320
-const MAX_SILENCE_MS = 2200
 
 function variance(values: number[]): number {
   if (values.length === 0) return 0
@@ -38,14 +34,7 @@ function variance(values: number[]): number {
   return values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length
 }
 
-function getWindowMs(samples: number[]): number {
-  if (samples.length < 3) return WHEEL_WINDOW_MS
-  const mean = samples.reduce((sum, value) => sum + value, 0) / samples.length
-  const isTrackpadLike = mean < 25 && variance(samples) < 200
-  return isTrackpadLike ? TRACKPAD_WINDOW_MS : WHEEL_WINDOW_MS
-}
-
-function inferWheelInputType(session: SessionState): { type: InputType; confidence: number } {
+function inferWheelInputType(session: SessionState): { type: SpinMeasurement['inferredInputType']; confidence: number } {
   const dur = Math.max(1, session.lastTs - session.startTs)
   const sampleVariance = variance(session.samples)
   const mean = session.samples.reduce((sum, value) => sum + value, 0) / Math.max(1, session.samples.length)
@@ -73,7 +62,7 @@ function buildAnomalyFlags(args: {
   if (!args.trusted) flags.push('untrusted_event')
   if (args.durationMs <= 0) flags.push('invalid_duration')
   if (args.durationMs < 6 && args.eventCount > 2) flags.push('impossible_burst')
-  if (args.eventCount > 80) flags.push('excessive_events')
+  if (args.eventCount > 120) flags.push('excessive_events')
   if (args.normalizedDeltaTotal > 25000 || args.rawDeltaTotal > 9000) flags.push('extreme_delta')
   return flags
 }
@@ -82,29 +71,6 @@ function calcTrustedScore(trusted: boolean, anomalyFlags: string[]): number {
   if (!trusted) return 0
   const score = 1 - anomalyFlags.length * 0.2
   return Math.max(0, Math.min(1, score))
-}
-
-function tailAverage(samples: number[]): number {
-  if (samples.length === 0) return 0
-  const tail = samples.slice(-3)
-  return tail.reduce((sum, value) => sum + value, 0) / tail.length
-}
-
-function deriveSilenceMs(session: SessionState): number {
-  const inactivityMs = getWindowMs(session.samples)
-  const inferred = inferWheelInputType(session)
-  let graceMs = inferred.type === 'free-spin-wheel' ? FREESPIN_GRACE_MS : BASE_GRACE_MS
-  if (tailAverage(session.samples) < 3) {
-    graceMs += LOW_TAIL_GRACE_BONUS_MS
-  }
-
-  const avgInterval =
-    session.intervals.length > 0
-      ? session.intervals.reduce((sum, value) => sum + value, 0) / session.intervals.length
-      : 16
-
-  const adaptiveMs = avgInterval * 5 + graceMs
-  return Math.max(MIN_SILENCE_MS, Math.min(MAX_SILENCE_MS, Math.max(inactivityMs + graceMs, adaptiveMs)))
 }
 
 export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }: UseSpinMeasurementArgs) {
@@ -164,25 +130,24 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
   }, [clearTimer, onComplete])
 
   const scheduleFinalizeCheck = useCallback(() => {
+    clearTimer()
+
     const runCheck = () => {
-      clearTimer()
       const session = sessionRef.current
       if (!session) return
 
       const now = performance.now()
-      const silenceMs = deriveSilenceMs(session)
-      const idleMs = now - session.lastTs
-
-      if (idleMs >= silenceMs) {
+      const elapsedSinceSignificant = now - session.lastSignificantUpdateAt
+      if (elapsedSinceSignificant >= STOP_AFTER_MS) {
         flush()
         return
       }
 
-      const waitMs = silenceMs - idleMs
+      const waitMs = STOP_AFTER_MS - elapsedSinceSignificant
       timerRef.current = window.setTimeout(runCheck, Math.max(8, waitMs))
     }
 
-    runCheck()
+    timerRef.current = window.setTimeout(runCheck, STOP_AFTER_MS)
   }, [clearTimer, flush])
 
   const onWheel = useCallback(
@@ -200,6 +165,7 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
         sessionRef.current = {
           startTs: now,
           lastTs: now,
+          lastSignificantUpdateAt: now,
           rawDeltaTotal: 0,
           normalizedDeltaTotal: 0,
           maxSingleDelta: 0,
@@ -207,28 +173,22 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
           deltaMode: event.deltaMode,
           trusted: true,
           samples: [],
-          intervals: [],
         }
         onStart?.()
       }
 
       const session = sessionRef.current
-      const gap = now - session.lastTs
-      if (gap > 0) {
-        session.intervals.push(gap)
-        if (session.intervals.length > 12) {
-          session.intervals.shift()
-        }
-      }
-
       session.lastTs = now
       session.rawDeltaTotal += raw
       session.normalizedDeltaTotal += normalized
       session.maxSingleDelta = Math.max(session.maxSingleDelta, raw)
       session.eventCount += 1
       session.samples.push(raw)
-      onProgress?.(buildProgress(session))
+      if (raw >= SIGNIFICANT_DELTA_EPS) {
+        session.lastSignificantUpdateAt = now
+      }
 
+      onProgress?.(buildProgress(session))
       scheduleFinalizeCheck()
     },
     [buildProgress, isListening, onProgress, onStart, scheduleFinalizeCheck],
