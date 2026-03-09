@@ -40,6 +40,15 @@ function safeParse<T>(raw: string | null): T | null {
   }
 }
 
+function toNumber(value: unknown, fallback: number): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const n = Number(value)
+    if (Number.isFinite(n)) return n
+  }
+  return fallback
+}
+
 function toDeclaredEnvironment(input: unknown): DeclaredEnvironment | null {
   if (!input || typeof input !== 'object') return null
   const value = input as Partial<DeclaredEnvironment> & LegacyEnvironment
@@ -80,17 +89,17 @@ function normalizeDetected(legacy?: LegacyEnvironment): DetectedEnvironment {
 
 function normalizeMeasurement(measurement: Partial<SpinMeasurement> | undefined): SpinMeasurement {
   return {
-    rawDeltaTotal: measurement?.rawDeltaTotal ?? 0,
-    normalizedDeltaTotal: measurement?.normalizedDeltaTotal ?? 0,
-    maxSingleDelta: measurement?.maxSingleDelta ?? 0,
-    eventCount: measurement?.eventCount ?? 0,
-    deltaMode: measurement?.deltaMode ?? 0,
-    durationMs: measurement?.durationMs ?? 0,
+    rawDeltaTotal: toNumber(measurement?.rawDeltaTotal, 0),
+    normalizedDeltaTotal: toNumber(measurement?.normalizedDeltaTotal, 0),
+    maxSingleDelta: toNumber(measurement?.maxSingleDelta, 0),
+    eventCount: toNumber(measurement?.eventCount, 0),
+    deltaMode: toNumber(measurement?.deltaMode, 0),
+    durationMs: toNumber(measurement?.durationMs, 0),
     trusted: measurement?.trusted ?? false,
     inferredInputType: measurement?.inferredInputType ?? 'other',
-    inferenceConfidence: measurement?.inferenceConfidence ?? 0,
+    inferenceConfidence: toNumber(measurement?.inferenceConfidence, 0),
     anomalyFlags: measurement?.anomalyFlags ?? [],
-    trustedScore: measurement?.trustedScore ?? (measurement?.trusted ? 1 : 0),
+    trustedScore: toNumber(measurement?.trustedScore, measurement?.trusted ? 1 : 0),
   }
 }
 
@@ -147,11 +156,11 @@ function normalizeRun(raw: unknown): SavedRun | null {
 
   const rawResult = value.result as Partial<RunResult>
   const normalizedResult: RunResult = {
-    finalDistance: rawResult.finalDistance ?? 0,
-    maxSpeed: rawResult.maxSpeed ?? 0,
-    initialSpeed: rawResult.initialSpeed ?? 0,
-    displayedDistanceMeters: rawResult.displayedDistanceMeters ?? 0,
-    displayedMaxSpeedKmh: rawResult.displayedMaxSpeedKmh ?? 0,
+    finalDistance: toNumber(rawResult.finalDistance, 0),
+    maxSpeed: toNumber(rawResult.maxSpeed, 0),
+    initialSpeed: toNumber(rawResult.initialSpeed, 0),
+    displayedDistanceMeters: toNumber(rawResult.displayedDistanceMeters, 0),
+    displayedMaxSpeedKmh: toNumber(rawResult.displayedMaxSpeedKmh, 0),
   }
 
   return {

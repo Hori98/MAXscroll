@@ -9,7 +9,7 @@ type Props = {
   onRetry: () => void
   onBackHome: () => void
   onShare: () => void
-  shareState: 'idle' | 'done'
+  shareState: 'idle' | 'done' | 'error'
 }
 
 export function ResultPanel({
@@ -61,7 +61,7 @@ export function ResultPanel({
           onClick={onShare}
           type="button"
         >
-          {shareState === 'done' ? 'COPIED' : 'SHARE'}
+          {shareState === 'done' ? 'COPIED' : shareState === 'error' ? 'SHARE FAILED' : 'SHARE'}
         </button>
         <button
           className="rounded-xl border border-white/35 bg-white/5 px-6 py-3 font-mono text-white/85 transition hover:bg-white/15"

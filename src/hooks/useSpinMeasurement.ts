@@ -7,6 +7,7 @@ import type { InputType, SpinMeasurement, SpinMeasurementProgress } from '../lib
 type UseSpinMeasurementArgs = {
   onStart?: () => void
   onProgress?: (progress: SpinMeasurementProgress) => void
+  onCancel?: () => void
   onComplete: (measurement: SpinMeasurement) => void
 }
 
@@ -25,7 +26,7 @@ type SessionState = {
 
 const MIN_TOUCH_DELTA = 12
 const MAX_TOUCH_DURATION_MS = 700
-const MAX_WHEEL_MEASUREMENT_MS = 5000
+const MAX_WHEEL_MEASUREMENT_MS = 1200
 const BASE_GRACE_MS = 200
 const FREESPIN_GRACE_MS = 320
 const LOW_TAIL_GRACE_BONUS_MS = 120
@@ -107,11 +108,11 @@ function deriveSilenceMs(session: SessionState): number {
   return Math.max(MIN_SILENCE_MS, Math.min(MAX_SILENCE_MS, Math.max(inactivityMs + graceMs, adaptiveMs)))
 }
 
-export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinMeasurementArgs) {
+export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }: UseSpinMeasurementArgs) {
   const [isListening, setIsListening] = useState(false)
   const sessionRef = useRef<SessionState | null>(null)
   const timerRef = useRef<number | null>(null)
-  const touchStartRef = useRef<{ y: number; ts: number } | null>(null)
+  const touchStartRef = useRef<{ y: number; ts: number; started: boolean } | null>(null)
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
@@ -255,13 +256,32 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
       touchStartRef.current = {
         y: event.touches[0].clientY,
         ts: performance.now(),
+        started: false,
       }
-      onStart?.()
     }
 
     const onTouchMove = (event: TouchEvent) => {
       if (!isListening) return
       event.preventDefault()
+
+      const startPoint = touchStartRef.current
+      if (!startPoint || event.touches.length === 0 || !event.isTrusted) return
+
+      const currentY = event.touches[0].clientY
+      const delta = Math.abs(startPoint.y - currentY)
+      if (!startPoint.started && delta >= MIN_TOUCH_DELTA) {
+        startPoint.started = true
+        onStart?.()
+      }
+
+      if (startPoint.started) {
+        onProgress?.({
+          rawDeltaTotal: delta,
+          normalizedDeltaTotal: delta * 3.8,
+          eventCount: 1,
+          durationMs: Math.max(0, performance.now() - startPoint.ts),
+        })
+      }
     }
 
     const onTouchEnd = (event: TouchEvent) => {
@@ -272,7 +292,11 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
       const endY = event.changedTouches[0].clientY
       const durationMs = Math.max(1, performance.now() - startPoint.ts)
       const delta = Math.abs(startPoint.y - endY)
-      if (delta < MIN_TOUCH_DELTA || durationMs > MAX_TOUCH_DURATION_MS) return
+      if (!startPoint.started || delta < MIN_TOUCH_DELTA || durationMs > MAX_TOUCH_DURATION_MS) {
+        touchStartRef.current = null
+        onCancel?.()
+        return
+      }
 
       const velocity = delta / durationMs
       const normalized = delta * 3.8 + velocity * 300
@@ -313,7 +337,7 @@ export function useSpinMeasurement({ onStart, onProgress, onComplete }: UseSpinM
       window.removeEventListener('touchend', onTouchEnd)
       clearTimer()
     }
-  }, [clearTimer, isListening, onComplete, onStart, onWheel])
+  }, [clearTimer, isListening, onCancel, onComplete, onProgress, onStart, onWheel])
 
   return { isListening, start, stop }
 }

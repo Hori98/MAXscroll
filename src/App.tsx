@@ -67,7 +67,7 @@ function App() {
   const [result, setResult] = useState<RunResult | null>(null)
   const [previousRun, setPreviousRun] = useState<SavedRun | null>(null)
   const [isNewBest, setIsNewBest] = useState(false)
-  const [shareState, setShareState] = useState<'idle' | 'done'>('idle')
+  const [shareState, setShareState] = useState<'idle' | 'done' | 'error'>('idle')
   const [adCountdown, setAdCountdown] = useState(2)
   const [bestRun, setBestRun] = useState<SavedRun | null>(() => getBestRun())
   const { playLaunch, playResult, playClick } = useSoundEffects()
@@ -79,21 +79,24 @@ function App() {
     onProgress: (progress) => {
       setMeasurementProgress(progress)
     },
+    onCancel: () => {
+      setMeasurementProgress(null)
+      setPhase('armed')
+    },
     onComplete: (nextMeasurement) => {
       setMeasurement(nextMeasurement)
       setMeasurementProgress(null)
-      setEnvironment((prev) =>
-        makeEnvironmentProfile(
-          prev.detected,
-          {
-            inputType: nextMeasurement.inferredInputType,
-            confidence: nextMeasurement.inferenceConfidence,
-          },
-          prev.declared,
-        ),
+      const nextEnvironment = makeEnvironmentProfile(
+        environment.detected,
+        {
+          inputType: nextMeasurement.inferredInputType,
+          confidence: nextMeasurement.inferenceConfidence,
+        },
+        environment.declared,
       )
+      setEnvironment(nextEnvironment)
       const nextResult = calcRunResultFromMeasurement(nextMeasurement)
-      onFlightComplete(nextResult, nextMeasurement)
+      onFlightComplete(nextResult, nextMeasurement, nextEnvironment)
     },
   })
 
@@ -121,11 +124,15 @@ function App() {
     })
   }
 
-  const onFlightComplete = (nextResult: RunResult, measured: SpinMeasurement) => {
+  const onFlightComplete = (
+    nextResult: RunResult,
+    measured: SpinMeasurement,
+    runEnvironment: EnvironmentProfile,
+  ) => {
     playResult()
     const prevLatest = getLatestRun()
     setPreviousRun(prevLatest)
-    const run = createSavedRun(environment, measured, nextResult)
+    const run = createSavedRun(runEnvironment, measured, nextResult)
     saveLatestRun(run)
 
     const shouldUpdateBest = !bestRun || nextResult.displayedDistanceMeters > bestRun.result.displayedDistanceMeters
@@ -173,9 +180,14 @@ function App() {
       }
     }
 
-    await navigator.clipboard.writeText(`${text} ${window.location.href}`)
-    setShareState('done')
-    window.setTimeout(() => setShareState('idle'), 1200)
+    try {
+      await navigator.clipboard.writeText(`${text} ${window.location.href}`)
+      setShareState('done')
+      window.setTimeout(() => setShareState('idle'), 1200)
+    } catch {
+      setShareState('error')
+      window.setTimeout(() => setShareState('idle'), 1600)
+    }
   }
 
   const onRetry = () => {
