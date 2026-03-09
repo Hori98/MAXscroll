@@ -26,12 +26,12 @@ type SessionState = {
 
 const MIN_TOUCH_DELTA = 12
 const MAX_TOUCH_DURATION_MS = 700
-const MAX_WHEEL_MEASUREMENT_MS = 1200
+const MAX_WHEEL_MEASUREMENT_MS = 12000
 const BASE_GRACE_MS = 200
 const FREESPIN_GRACE_MS = 320
 const LOW_TAIL_GRACE_BONUS_MS = 120
-const MIN_SILENCE_MS = 260
-const MAX_SILENCE_MS = 900
+const MIN_SILENCE_MS = 320
+const MAX_SILENCE_MS = 2200
 
 function variance(values: number[]): number {
   if (values.length === 0) return 0
@@ -104,7 +104,7 @@ function deriveSilenceMs(session: SessionState): number {
       ? session.intervals.reduce((sum, value) => sum + value, 0) / session.intervals.length
       : 16
 
-  const adaptiveMs = avgInterval * 3 + graceMs
+  const adaptiveMs = avgInterval * 5 + graceMs
   return Math.max(MIN_SILENCE_MS, Math.min(MAX_SILENCE_MS, Math.max(inactivityMs + graceMs, adaptiveMs)))
 }
 
