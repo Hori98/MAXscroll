@@ -2,7 +2,6 @@ import { makeEnvironmentProfile } from './getEnvironment'
 import type {
   DeclaredEnvironment,
   EnvironmentProfile,
-  RunResult,
   SavedRun,
   SpinMeasurement,
   InputType,
@@ -152,23 +151,15 @@ function normalizeRun(raw: unknown): SavedRun | null {
   if (!raw || typeof raw !== 'object') return null
   const value = raw as Partial<SavedRun> & { environment?: unknown; measurement?: Partial<SpinMeasurement> }
 
-  if (!value.result || typeof value.result !== 'object') return null
-
-  const rawResult = value.result as Partial<RunResult>
-  const normalizedResult: RunResult = {
-    finalDistance: toNumber(rawResult.finalDistance, 0),
-    maxSpeed: toNumber(rawResult.maxSpeed, 0),
-    initialSpeed: toNumber(rawResult.initialSpeed, 0),
-    displayedDistanceMeters: toNumber(rawResult.displayedDistanceMeters, 0),
-    displayedMaxSpeedKmh: toNumber(rawResult.displayedMaxSpeedKmh, 0),
-  }
+  // measurement がなければ意味のある再計算ができないのでスキップ
+  if (!value.measurement || typeof value.measurement !== 'object') return null
 
   return {
     id: typeof value.id === 'string' ? value.id : crypto.randomUUID(),
     createdAt: typeof value.createdAt === 'string' ? value.createdAt : new Date(0).toISOString(),
     environment: normalizeEnvironment(value.environment),
     measurement: normalizeMeasurement(value.measurement),
-    result: normalizedResult,
+    // 旧形式の result フィールドは読み捨て。必要時は calcRunResultFromMeasurement で再計算する。
   }
 }
 

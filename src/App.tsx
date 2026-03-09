@@ -29,17 +29,12 @@ import type {
   SpinMeasurementProgress,
 } from './lib/types'
 
-function createSavedRun(
-  environment: SavedRun['environment'],
-  measurement: SpinMeasurement,
-  result: RunResult,
-): SavedRun {
+function createSavedRun(environment: SavedRun['environment'], measurement: SpinMeasurement): SavedRun {
   return {
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
     environment,
     measurement,
-    result,
   }
 }
 
@@ -132,10 +127,12 @@ function App() {
     playResult()
     const prevLatest = getLatestRun()
     setPreviousRun(prevLatest)
-    const run = createSavedRun(runEnvironment, measured, nextResult)
+    const run = createSavedRun(runEnvironment, measured)
     saveLatestRun(run)
 
-    const shouldUpdateBest = !bestRun || nextResult.displayedDistanceMeters > bestRun.result.displayedDistanceMeters
+    // bestRun との比較は常に現在の定数で再計算した値を使う（SSOT: calcRunResultFromMeasurement）
+    const bestResult = bestRun ? calcRunResultFromMeasurement(bestRun.measurement) : null
+    const shouldUpdateBest = !bestResult || Math.abs(nextResult.totalDeltaPx) > Math.abs(bestResult.totalDeltaPx)
     if (shouldUpdateBest) {
       saveBestRun(run)
       setBestRun(run)
@@ -150,7 +147,8 @@ function App() {
   const onShare = async () => {
     if (!result) return
 
-    const text = `SPIN LAUNCH ${result.displayedDistanceMeters.toFixed(1)}m | max ${result.displayedMaxSpeedKmh.toFixed(1)}km/h | ${environment.detected.osName}/${environment.detected.browserName}/${environment.effective.inputType}`
+    const sign = result.totalDeltaPx >= 0 ? '+' : ''
+    const text = `SPIN LAUNCH ${sign}${result.totalDeltaPx.toFixed(0)}px | avg ${sign}${result.averageSpeedPxMs.toFixed(2)}px/ms | ${environment.detected.osName}/${environment.detected.browserName}/${environment.effective.inputType}`
     const imageFile = await buildShareImage(result, environment)
 
     if (navigator.share && imageFile && navigator.canShare?.({ files: [imageFile] })) {

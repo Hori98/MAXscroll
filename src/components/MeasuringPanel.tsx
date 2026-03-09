@@ -10,9 +10,15 @@ export function MeasuringPanel({ progress, hasTouch }: Props) {
     <section className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center px-6 text-center">
       <p className="text-xs uppercase tracking-[0.35em] text-cyan-300/70">Measuring Input</p>
       <div className="mt-6 font-mono text-5xl font-bold text-cyan-100 sm:text-6xl">
-        {progress ? progress.normalizedDeltaTotal.toFixed(1) : '0.0'}
+        {progress
+          ? `${progress.normalizedDeltaTotal >= 0 ? '+' : ''}${progress.normalizedDeltaTotal.toFixed(0)}`
+          : '+0'}{' '}
+        px
       </div>
       <p className="mt-2 text-cyan-100/70">{hasTouch ? 'Swipe in progress...' : 'Scroll in progress...'}</p>
+      <p className="mt-3 font-mono text-lg font-semibold text-red-400">
+        Spins: {progress?.eventCount ?? 0}
+      </p>
 
       <div className="mt-8 grid w-full max-w-md gap-2 rounded-xl border border-white/10 bg-black/30 p-4 text-left text-sm text-white/80">
         <div>Raw Delta: {progress ? progress.rawDeltaTotal.toFixed(1) : '0.0'}</div>

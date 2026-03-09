@@ -1,5 +1,6 @@
 import { EnvironmentBadge } from './EnvironmentBadge'
 import { EnvironmentEditor } from './EnvironmentEditor'
+import { calcRunResultFromMeasurement } from '../lib/calcRunResult'
 import type { DeclaredEnvironment, EnvironmentProfile, SavedRun } from '../lib/types'
 
 type Props = {
@@ -28,7 +29,10 @@ export function HomePanel({ environment, bestRun, onLaunch, onEnvironmentChange 
 
       {bestRun && (
         <div className="mt-3 rounded-lg border border-white/10 bg-white/5 px-4 py-2 font-mono text-sm text-white/80">
-          BEST: {bestRun.result.displayedDistanceMeters.toFixed(1)} m
+          {(() => {
+              const best = calcRunResultFromMeasurement(bestRun.measurement)
+              return `BEST: ${best.totalDeltaPx >= 0 ? '+' : ''}${best.totalDeltaPx.toFixed(0)} px`
+            })()}
         </div>
       )}
 

@@ -1,12 +1,13 @@
+// deltaY の符号を保持して正規化する（正 = 下スクロール、負 = 上スクロール）
 export function normalizeDelta(deltaY: number, deltaMode: number): number {
   switch (deltaMode) {
     case 0:
-      return Math.abs(deltaY)
+      return deltaY
     case 1:
-      return Math.abs(deltaY) * 16
+      return deltaY * 16
     case 2:
-      return Math.abs(deltaY) * window.innerHeight
+      return deltaY * window.innerHeight
     default:
-      return Math.abs(deltaY)
+      return deltaY
   }
 }

@@ -69,11 +69,9 @@ export type SpinMeasurementProgress = {
 }
 
 export type RunResult = {
-  finalDistance: number
-  maxSpeed: number
-  initialSpeed: number
-  displayedDistanceMeters: number
-  displayedMaxSpeedKmh: number
+  totalDeltaPx: number      // 符号付き合計（正 = 下スクロール、負 = 上スクロール）
+  averageSpeedPxMs: number  // 符号付き平均速度（px/ms）
+  maxEventDeltaPx: number   // 単発最大イベントの絶対値（px）
 }
 
 export type SavedRun = {
@@ -81,5 +79,4 @@ export type SavedRun = {
   createdAt: string
   environment: EnvironmentProfile
   measurement: SpinMeasurement
-  result: RunResult
 }

@@ -22,11 +22,12 @@ export async function buildShareImage(result: RunResult, environment: Environmen
 
   ctx.fillStyle = '#e7fbff'
   ctx.font = '700 120px "IBM Plex Mono", monospace'
-  ctx.fillText(`${result.displayedDistanceMeters.toFixed(1)} m`, 110, 330)
+  const sign = result.totalDeltaPx >= 0 ? '+' : ''
+  ctx.fillText(`${sign}${result.totalDeltaPx.toFixed(0)} px`, 110, 330)
 
   ctx.fillStyle = '#9dd6ff'
   ctx.font = '500 42px "Space Grotesk", sans-serif'
-  ctx.fillText(`Max Speed ${result.displayedMaxSpeedKmh.toFixed(1)} km/h`, 110, 408)
+  ctx.fillText(`Avg Speed ${sign}${result.averageSpeedPxMs.toFixed(2)} px/ms`, 110, 408)
   ctx.fillText(
     `${environment.detected.osName} / ${environment.detected.browserName} / ${environment.effective.inputType}`,
     110,

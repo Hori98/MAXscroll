@@ -1,4 +1,5 @@
 import { EnvironmentBadge } from './EnvironmentBadge'
+import { calcRunResultFromMeasurement } from '../lib/calcRunResult'
 import type { EnvironmentProfile, RunResult, SavedRun } from '../lib/types'
 
 type Props = {
@@ -22,23 +23,24 @@ export function ResultPanel({
   onShare,
   shareState,
 }: Props) {
-  const diffMeters = previousRun
-    ? result.displayedDistanceMeters - previousRun.result.displayedDistanceMeters
+  const diffPx = previousRun
+    ? result.totalDeltaPx - calcRunResultFromMeasurement(previousRun.measurement).totalDeltaPx
     : null
 
   return (
     <section className="mx-auto flex min-h-screen w-full max-w-3xl flex-col items-center justify-center px-6 text-center">
       <p className="text-sm uppercase tracking-[0.3em] text-cyan-300/70">Result Hub</p>
       <h2 className="mt-3 font-mono text-6xl font-bold text-cyan-100 sm:text-7xl">
-        {result.displayedDistanceMeters.toFixed(1)} m
+        {result.totalDeltaPx >= 0 ? '+' : ''}{result.totalDeltaPx.toFixed(0)} px
       </h2>
       {isNewBest && <p className="mt-2 font-mono text-lg text-accent">NEW BEST!</p>}
 
       <div className="mt-8 grid w-full gap-2 rounded-xl border border-white/10 bg-black/30 p-4 text-left text-sm text-white/80">
-        <div>Max Speed: {result.displayedMaxSpeedKmh.toFixed(1)} km/h</div>
+        <div>Avg Speed: {result.averageSpeedPxMs >= 0 ? '+' : ''}{result.averageSpeedPxMs.toFixed(2)} px/ms</div>
+        <div>Max Event: {result.maxEventDeltaPx.toFixed(1)} px</div>
         <div>
           Diff vs Previous:{' '}
-          {diffMeters === null ? '-' : `${diffMeters >= 0 ? '+' : ''}${diffMeters.toFixed(1)} m`}
+          {diffPx === null ? '-' : `${diffPx >= 0 ? '+' : ''}${diffPx.toFixed(0)} px`}
         </div>
         <div>Input: {environment.effective.inputType}</div>
         <div>Device: {environment.effective.deviceName || '-'}</div>
