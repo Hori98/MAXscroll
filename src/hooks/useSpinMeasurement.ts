@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 import { normalizeDelta } from '../lib/normalizeDelta'
 import type { SpinMeasurement, SpinMeasurementProgress } from '../lib/types'
@@ -14,6 +14,8 @@ type SessionState = {
   startTs: number
   lastTs: number
   lastSignificantUpdateAt: number
+  lockTs: number | null
+  locked: boolean
   rawDeltaTotal: number
   normalizedDeltaTotal: number
   maxSingleDelta: number
@@ -27,6 +29,8 @@ const STOP_AFTER_MS = 1000
 const SIGNIFICANT_DELTA_EPS = 0.8
 const MIN_TOUCH_DELTA = 12
 const MAX_TOUCH_DURATION_MS = 700
+const RESCROLL_GAP_MS = 260
+const CAPTURE_WINDOW_MS = 1600
 
 function variance(values: number[]): number {
   if (values.length === 0) return 0
@@ -78,12 +82,39 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
   const sessionRef = useRef<SessionState | null>(null)
   const timerRef = useRef<number | null>(null)
   const touchStartRef = useRef<{ y: number; ts: number; started: boolean } | null>(null)
+  // flush()/onTouchEnd 後の非同期 state 更新ラグを塞ぐ同期ロック
+  const lockedRef = useRef(false)
+
+  // コールバックを ref に格納することで、毎レンダリングで新しい関数参照が生成されても
+  // flush / scheduleFinalizeCheck / onWheel が再生成されないようにする
+  const onStartRef = useRef(onStart)
+  const onProgressRef = useRef(onProgress)
+  const onCancelRef = useRef(onCancel)
+  const onCompleteRef = useRef(onComplete)
+
+  // isListening も ref で持つことで onWheel が isListening を deps に含めなくて済む
+  const isListeningRef = useRef(isListening)
+
+  // useLayoutEffect でレンダリング直後（イベント発火前）に ref を最新値へ同期する
+  useLayoutEffect(() => {
+    onStartRef.current = onStart
+    onProgressRef.current = onProgress
+    onCancelRef.current = onCancel
+    onCompleteRef.current = onComplete
+    isListeningRef.current = isListening
+  })
 
   const clearTimer = useCallback(() => {
     if (timerRef.current !== null) {
       window.clearTimeout(timerRef.current)
       timerRef.current = null
     }
+  }, [])
+
+  const lockCapture = useCallback((session: SessionState, now: number) => {
+    if (session.locked) return
+    session.locked = true
+    session.lockTs = now
   }, [])
 
   const buildProgress = useCallback((session: SessionState): SpinMeasurementProgress => {
@@ -95,6 +126,7 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
     }
   }, [])
 
+  // onComplete を deps から除外 → flush が安定した参照になる
   const flush = useCallback(() => {
     const session = sessionRef.current
     if (!session) return
@@ -123,12 +155,14 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
       trustedScore: calcTrustedScore(session.trusted, anomalyFlags),
     }
 
+    lockedRef.current = true  // 同期ロック（setIsListening の非同期ラグを塞ぐ）
     sessionRef.current = null
     clearTimer()
     setIsListening(false)
-    onComplete(measurement)
-  }, [clearTimer, onComplete])
+    onCompleteRef.current(measurement)
+  }, [clearTimer])
 
+  // flush が安定 → scheduleFinalizeCheck も安定した参照になる
   const scheduleFinalizeCheck = useCallback(() => {
     clearTimer()
 
@@ -137,22 +171,25 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
       if (!session) return
 
       const now = performance.now()
-      const elapsedSinceSignificant = now - session.lastSignificantUpdateAt
-      if (elapsedSinceSignificant >= STOP_AFTER_MS) {
+      const baselineTs = session.locked ? (session.lockTs ?? session.lastSignificantUpdateAt) : session.lastSignificantUpdateAt
+      const elapsedMs = now - baselineTs
+      if (elapsedMs >= STOP_AFTER_MS) {
         flush()
         return
       }
 
-      const waitMs = STOP_AFTER_MS - elapsedSinceSignificant
+      const waitMs = STOP_AFTER_MS - elapsedMs
       timerRef.current = window.setTimeout(runCheck, Math.max(8, waitMs))
     }
 
     timerRef.current = window.setTimeout(runCheck, STOP_AFTER_MS)
   }, [clearTimer, flush])
 
+  // isListening / onProgress / onStart を deps から除外 → onWheel が安定した参照になる
   const onWheel = useCallback(
     (event: WheelEvent) => {
-      if (!isListening) return
+      if (lockedRef.current) return       // 同期ロック（flush後の非同期ラグ対策）
+      if (!isListeningRef.current) return
       if (!event.isTrusted) return
 
       event.preventDefault()
@@ -166,6 +203,8 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
           startTs: now,
           lastTs: now,
           lastSignificantUpdateAt: now,
+          lockTs: null,
+          locked: false,
           rawDeltaTotal: 0,
           normalizedDeltaTotal: 0,
           maxSingleDelta: 0,
@@ -174,10 +213,27 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
           trusted: true,
           samples: [],
         }
-        onStart?.()
+        onStartRef.current?.()
+      } else {
+        // 前イベントから RESCROLL_GAP_MS 以上空いていたら再操作とみなして即終了
+        const gapMs = now - sessionRef.current.lastTs
+        if (gapMs > RESCROLL_GAP_MS) {
+          lockCapture(sessionRef.current, now)
+        }
       }
 
       const session = sessionRef.current
+      // 最初の1回だけを採用するため、キャプチャ窓を過ぎたら即ロック
+      if (!session.locked && now - session.startTs > CAPTURE_WINDOW_MS) {
+        lockCapture(session, now)
+      }
+
+      if (session.locked) {
+        session.lastTs = now
+        scheduleFinalizeCheck()
+        return
+      }
+
       session.lastTs = now
       session.rawDeltaTotal += raw
       session.normalizedDeltaTotal += normalized
@@ -188,13 +244,14 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
         session.lastSignificantUpdateAt = now
       }
 
-      onProgress?.(buildProgress(session))
+      onProgressRef.current?.(buildProgress(session))
       scheduleFinalizeCheck()
     },
-    [buildProgress, isListening, onProgress, onStart, scheduleFinalizeCheck],
+    [buildProgress, lockCapture, scheduleFinalizeCheck],
   )
 
   const start = useCallback(() => {
+    lockedRef.current = false
     sessionRef.current = null
     touchStartRef.current = null
     clearTimer()
@@ -208,9 +265,11 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
     setIsListening(false)
   }, [clearTimer])
 
+  // deps が安定したので、このeffectは isListening が変わったときだけ再実行される
+  // → clearTimer() がスクロール毎に呼ばれてタイマーをキャンセルするバグが解消される
   useEffect(() => {
     const onTouchStart = (event: TouchEvent) => {
-      if (!isListening || event.touches.length === 0 || !event.isTrusted) return
+      if (!isListeningRef.current || event.touches.length === 0 || !event.isTrusted) return
       touchStartRef.current = {
         y: event.touches[0].clientY,
         ts: performance.now(),
@@ -219,7 +278,7 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
     }
 
     const onTouchMove = (event: TouchEvent) => {
-      if (!isListening) return
+      if (!isListeningRef.current) return
       event.preventDefault()
 
       const startPoint = touchStartRef.current
@@ -229,11 +288,11 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
       const delta = Math.abs(startPoint.y - currentY)
       if (!startPoint.started && delta >= MIN_TOUCH_DELTA) {
         startPoint.started = true
-        onStart?.()
+        onStartRef.current?.()
       }
 
       if (startPoint.started) {
-        onProgress?.({
+        onProgressRef.current?.({
           rawDeltaTotal: delta,
           normalizedDeltaTotal: delta * 3.8,
           eventCount: 1,
@@ -243,7 +302,7 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
     }
 
     const onTouchEnd = (event: TouchEvent) => {
-      if (!isListening || !event.isTrusted) return
+      if (!isListeningRef.current || !event.isTrusted) return
       const startPoint = touchStartRef.current
       if (!startPoint || event.changedTouches.length === 0) return
 
@@ -252,7 +311,7 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
       const delta = Math.abs(startPoint.y - endY)
       if (!startPoint.started || delta < MIN_TOUCH_DELTA || durationMs > MAX_TOUCH_DURATION_MS) {
         touchStartRef.current = null
-        onCancel?.()
+        onCancelRef.current?.()
         return
       }
 
@@ -267,8 +326,9 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
       })
 
       touchStartRef.current = null
+      lockedRef.current = true  // 同期ロック
       setIsListening(false)
-      onComplete({
+      onCompleteRef.current({
         rawDeltaTotal: delta,
         normalizedDeltaTotal: normalized,
         maxSingleDelta: delta,
@@ -295,7 +355,7 @@ export function useSpinMeasurement({ onStart, onProgress, onCancel, onComplete }
       window.removeEventListener('touchend', onTouchEnd)
       clearTimer()
     }
-  }, [clearTimer, isListening, onCancel, onComplete, onProgress, onStart, onWheel])
+  }, [clearTimer, isListening, onWheel])
 
   return { isListening, start, stop }
 }

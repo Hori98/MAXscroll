@@ -52,7 +52,18 @@ Constants:
 - Only `onStart` enters measuring.
 - Only `onComplete` or `onCancel` exits measuring.
 
-### 3.3 No hidden hard cutoff
+### 3.3 First-Spin Capture Rule
+
+- Capture only the first spin burst.
+- Start capture at first trusted wheel input.
+- Accept events only while:
+  - no re-scroll gap is detected, and
+  - elapsed capture time <= `CAPTURE_WINDOW_MS`.
+- If re-scroll gap or window overflow is detected, lock capture.
+- While locked, ignore all additional wheel input.
+- Finalize after `STOP_AFTER_MS` from lock/significant update baseline.
+
+### 3.4 No hidden hard cutoff
 
 Remove or disable max measurement timeout for wheel.
 If needed for safety, it must be:
